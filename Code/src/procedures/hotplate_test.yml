@@ -1,0 +1,8 @@
+Procedure:
+  - ["set_temperature", 0]
+  - ["wait",  10 ]
+  - ["set_temperature", 100]
+  - ["wait",  10 ]
+  - ["set_temperature", 200]
+  - ["wait",  10 ]
+  - ["set_temperature", 0]
