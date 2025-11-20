@@ -83,11 +83,9 @@ class ControlBoard():
         self.reader_thread.write(message.encode("utf-8"))
         self.logger.debug(f"Sending message: {message}")
         
-    def move_axis(self, axis: str, distance_mm: float, feedrate_mm_per_minute: int = 2000, relative: bool = False, finish_move: bool = True):
+    def move_axis(self, distance_mm_x: float, distance_mm_y: float, distance_mm_z: float, feedrate_mm_per_minute: int = 2000, relative: bool = False, finish_move: bool = True):
         """ Takes in a list of axes, distances and speeds to move the gantry"""
-        if axis not in self.positions.keys():
-            raise f"Invalid axis {axis}"
-  
+
         if relative and distance_mm == 0:
             return
         
@@ -95,10 +93,8 @@ class ControlBoard():
             self.send_message("G91")
         sleep(0.1)
         # dont go crazy with these axes,
-        if (axis == "Z" or axis == "A" or axis == "B") and feedrate_mm_per_minute == 2000:
-            feedrate_mm_per_minute = 600
             
-        self.send_message(f"G0 {axis}{distance_mm} F{feedrate_mm_per_minute}")
+        self.send_message(f"G0 X{distance_mm_x} Y{distance_mm_y} Z{distance_mm_z} F{feedrate_mm_per_minute}")
         sleep(0.1)
             
         

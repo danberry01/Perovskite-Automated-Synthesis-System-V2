@@ -9,9 +9,13 @@ class Toolhead():
     def __init__(self, control_board: ControlBoard):
         self.control_board = control_board
         
-    def move_axis(self, axis: str, distance_mm: float, relative: bool = False, finish_move: bool = True):
-        self.control_board.move_axis(axis, distance_mm, 1000, relative=relative, finish_move=finish_move)
+    # def move_axis(self, axis: str, distance_mm: float, relative: bool = False, finish_move: bool = True):
+    #     self.control_board.move_axis(axis, distance_mm, 1000, relative=relative, finish_move=finish_move)
         
+    def move_axis(self, distance_mm_x: float, distance_mm_y: float, distance_mm_z: float, relative: bool = False, finish_move: bool = True):
+        self.control_board.move_axis(distance_mm_x, distance_mm_y, distance_mm_z, 1000, relative = relative, finish_move = finish_move)
+
+
     def get_position(self, axis):
         return self.control_board.positions[axis]
     

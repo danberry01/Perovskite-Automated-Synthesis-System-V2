@@ -204,9 +204,7 @@ class Dispatcher():
         if relaitve >= 1:
             rrelaitve = True
         
-        self.toolhead.move_axis("X", x, relative=rrelaitve)
-        self.toolhead.move_axis("Y", y, relative=rrelaitve)
-        self.toolhead.move_axis("Z", z, relative=rrelaitve)
+        self.toolhead.move_axis(x, y, z, relative = rrelaitve)
         
     def move_to_location(self, destination: str):
         self.validate_location(destination)
