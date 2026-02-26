@@ -422,7 +422,7 @@ class StepFrame(ctk.CTkFrame):
             
 class LabelEntry(ctk.CTkFrame):
     def __init__(self, master, label: str, entry_type: type = str):
-        super().__init__(master=master,width=200)
+        super().__init__(master=master,width=300)
         self.entry_type = entry_type
         
         # entry label
