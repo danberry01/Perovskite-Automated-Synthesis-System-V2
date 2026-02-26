@@ -1,5 +1,5 @@
 [project]
-name = "PASS_ECD515"
+name = "PASS_ECD615"
 version = "0.1.0"
 dependencies = [
     "pyserial",

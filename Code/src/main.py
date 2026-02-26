@@ -95,7 +95,7 @@ if __name__ == "__main__":
     app = ctk.CTk()
     ctk.set_appearance_mode("light")
     app.geometry("1200x1000")
-    app.title("ECD 515 - Perovskite Automated Synthesis System")
+    app.title("ECD 615 - Perovskite Automated Synthesis System V2")
     
     spectrometer_frame = SpectrometerFrame(master=app, spectrometer=spectrometer)
     
