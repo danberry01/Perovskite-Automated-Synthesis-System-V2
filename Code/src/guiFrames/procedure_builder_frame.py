@@ -29,7 +29,7 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
             row=0, column=0, rowspan=9,
             padx=5,pady=5)
         
-        self.step_frame.bind("<Button-1>", self._deselect_step, add="+")
+        self.step_frame.bind("<ButtonRelease-1>", self._deselect_step, add="+")
         
         # step select dropdown
         self.step_dropdown = ctk.CTkOptionMenu(master=self,
@@ -126,14 +126,14 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
     def _bind_step_widgets(self, step_frame):
         """Recursively bind click events to all widgets in step frame"""
         
-        step_frame.bind('<Button-1>', lambda e: self._select_step(e,))
+        step_frame.bind('<ButtonRelease-1>', lambda e: self._select_step(e,))
         
         for child in step_frame.winfo_children():
             # Skip binding for checkboxes since it disables them
             if isinstance(child, ctk.CTkCheckBox):
                 continue
             
-            child.bind('<Button-1>', lambda e: self._select_step(e,))
+            child.bind('<ButtonRelease-1>', lambda e: self._select_step(e,))
             if len(child.winfo_children()) > 0:
                 self._bind_step_widgets(child)
     
