@@ -126,7 +126,7 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
     def _bind_step_widgets(self, step_frame):
         """Recursively bind click events to all widgets in step frame"""
         
-        step_frame.bind('<ButtonRelease-1>', lambda e: self._select_step(e,))
+        step_frame.bind('<Button-1>', lambda e: self._select_step(e,))
         
         for child in step_frame.winfo_children():
             # Skip binding for checkboxes since it disables them
