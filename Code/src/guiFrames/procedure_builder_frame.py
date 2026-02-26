@@ -29,7 +29,7 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
             row=0, column=0, rowspan=9,
             padx=5,pady=5)
         
-        self.step_frame.bind("<Button-1>", self._deselect_step)
+        self.step_frame.bind("<Button-1>", self._deselect_step, add="+")
         
         # step select dropdown
         self.step_dropdown = ctk.CTkOptionMenu(master=self,
@@ -140,6 +140,9 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
     
     def _deselect_step(self,event):
         """ Reset the border color of selected step if user clicks off"""
+        if event.widget != self.step_frame:
+            return
+        
         if self.selected_step is not None:
             self.selected_step.configure(border_color="#1f6aa5")
         self.selected_step = None
