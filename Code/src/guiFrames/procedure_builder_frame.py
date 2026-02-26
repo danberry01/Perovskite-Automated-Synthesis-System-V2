@@ -29,7 +29,7 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
             row=0, column=0, rowspan=9,
             padx=5,pady=5)
         
-        self.step_frame.bind("<ButtonRelease-1>", self._deselect_step, add="+")
+        self.step_frame.bind("<Button-1>", self._deselect_step, add="+")
         
         # step select dropdown
         self.step_dropdown = ctk.CTkOptionMenu(master=self,
