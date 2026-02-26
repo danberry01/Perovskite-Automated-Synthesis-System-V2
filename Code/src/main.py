@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     # -- GUI --
     app = ctk.CTk()
-    ctk.set_appearance_mode("light")
+    ctk.set_appearance_mode("dark")
     app.geometry("1200x1000")
     app.title("ECD 615 - Perovskite Automated Synthesis System V2")
     
