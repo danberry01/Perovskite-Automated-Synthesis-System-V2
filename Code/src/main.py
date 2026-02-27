@@ -122,6 +122,7 @@ if __name__ == "__main__":
     # hotplate.connect()
     
     
+    
     # --------LOAD DEFAULT PROCEDURE--------
     procedure_config = ProcedureFile().Open("procedures/default_procedure.yml")
     if procedure_config is not None:
