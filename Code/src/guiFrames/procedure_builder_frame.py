@@ -12,8 +12,7 @@ from drivers.procedure_file_driver import ProcedureFile
 
 class ProcedureBuilderFrame(ctk.CTkFrame):
     def __init__(self, master, moves, procedure_handler):
-        super().__init__(master=master,border_color="#1f6aa5",border_width=2,
-                         width=600)
+        super().__init__(master=master,border_color="#1f6aa5",border_width=2,width=600,corner_radius=0 )
         self.logger=logging.getLogger("Main Logger")
         self.step_list = []
         self.variation_step_list = []

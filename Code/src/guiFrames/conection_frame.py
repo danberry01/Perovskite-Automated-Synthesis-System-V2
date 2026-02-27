@@ -14,7 +14,7 @@ from drivers.spectrometer_driver import Spectrometer
 
 class ConnectionFrame(ctk.CTkFrame):
     def __init__(self, master, control_board: ControlBoard, spin_coater: SpinCoater, hotplate: Hotplate, camera: Camera, spectrometer: Spectrometer):  # Add spectrometer parameter
-        super().__init__(master=master,border_color="#1f6aa5",border_width=2,height=400)
+        super().__init__(master=master,border_color="#1f6aa5",border_width=2,height=400,corner_radius=0 )
 
         self.control_board = control_board
         self.spin_coater = spin_coater

@@ -14,7 +14,7 @@ class CameraFrame(ctk.CTkFrame):
         super().__init__(
             master=master,
             border_color="#1f6aa5",
-            border_width=2)
+            border_width=2,corner_radius=0 )
         
         self.camera = camera
 

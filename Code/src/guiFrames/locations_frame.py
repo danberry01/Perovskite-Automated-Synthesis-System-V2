@@ -10,7 +10,7 @@ from src.drivers.procedure_file_driver import ProcedureFile
 
 class LocationFrame(ctk.CTkScrollableFrame):
     def __init__(self, master):
-        super().__init__(master=master, width=300)
+        super().__init__(master=master, width=300,corner_radius=0 )
         self.location_entries = []
         self._load_locations()
         

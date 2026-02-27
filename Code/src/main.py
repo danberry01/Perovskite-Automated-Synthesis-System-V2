@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     # -- GUI --
     app = ctk.CTk()
-    ctk.set_appearance_mode("dark")
+    ctk.set_appearance_mode("light")
     app.geometry("1200x1000")
     app.title("ECD 615 - Perovskite Automated Synthesis System V2")
     
@@ -108,7 +108,7 @@ if __name__ == "__main__":
                             spectrometer=spectrometer,
                             vial_carousel=vial_carousel,
                             pippete_handler=pipette_handler,
-                            spectrometer_frame=spectrometer_frame, 
+                            spectromeer_frame=spectrometer_frame, 
                             tip_matrix=tip_matrix)
     
     procedure_handler = ProcedureHandler(dispatcher=dispatcher)
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     # spin_coater.connect()
     # hotplate.connect()
     
-    
+
     # --------LOAD DEFAULT PROCEDURE--------
     procedure_config = ProcedureFile().Open("procedures/default_procedure.yml")
     if procedure_config is not None:
