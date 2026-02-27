@@ -121,7 +121,8 @@ if __name__ == "__main__":
     # spin_coater.connect()
     # hotplate.connect()
     
-
+    
+    
     # --------LOAD DEFAULT PROCEDURE--------
     procedure_config = ProcedureFile().Open("procedures/default_procedure.yml")
     if procedure_config is not None:
