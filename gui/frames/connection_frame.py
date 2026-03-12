@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from ..components.theme import *
+from ..components.constants import *
 
 class ConnectionFrame(ctk.CTkFrame):
     """Frame to establish and display system connections"""

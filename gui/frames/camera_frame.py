@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from ..components.theme import *
+from ..components.constants import *
 
 class CameraFrame(ctk.CTkFrame):
     """Frame for displaying camera feed with coordinate projection, and filter buttons"""

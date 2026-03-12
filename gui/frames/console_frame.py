@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from ..components.theme import *
+from ..components.constants import *
 
 class ConsoleFrame(ctk.CTkFrame):
     """Frame that displays the console"""

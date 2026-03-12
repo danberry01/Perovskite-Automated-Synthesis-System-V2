@@ -1,4 +1,4 @@
-from .theme import *
+from .constants import *
 from .helper_functions import is_overlapping
 
 COLORS = [
@@ -8,4 +8,8 @@ COLORS = [
     "FOREGROUND_COLOR",
     "PRIMARY_BUTTON_COLOR",
     "PRIMARY_BUTTON_HOVER"
+]
+
+TABS = [
+    "TABS"
 ]

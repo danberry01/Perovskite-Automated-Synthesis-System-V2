@@ -6,3 +6,6 @@ BACKGROUND_COLOR = "#CFDEE7"
 FOREGROUND_COLOR = "#92B4F4"
 PRIMARY_BUTTON_COLOR = "#5E7CE2"
 HOVER_BUTTON_COLOR = "#0A369D"
+
+# Tab Options
+TABS = ["file_manager", "procedure_builder", "procedure_viewer", "settings"]

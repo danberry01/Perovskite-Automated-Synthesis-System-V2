@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from ..components.theme import *
+from ..components.constants import *
 
 class SpectrometerFrame(ctk.CTkFrame):
     """Frame to display spectrometer readings"""

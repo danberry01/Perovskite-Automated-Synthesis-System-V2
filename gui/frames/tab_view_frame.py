@@ -1,77 +1,59 @@
 import customtkinter as ctk
-from PIL import Image
-from ..components.theme import *
-from ..components.helper_functions import is_overlapping
+from ..components.constants import *
+
+from ..frames import FileManagerFrame, ProcedureBuilderFrame, ProcedureLogFrame, SettingsFrame
 
 class TabViewFrame(ctk.CTkFrame):
-    """Frame for Displaying different tab options"""
+    """Shell for managing ___, ___, and ____ tabs"""
     def __init__(self, master, **kwargs):
         super().__init__(
             master,
-            width = 70,
-            height = 800,
+            width = 930,
+            height = 650,
             corner_radius = 0,
             fg_color = FOREGROUND_COLOR
         )
+        self.columnconfigure(0, weight = 1)
+        self.rowconfigure(0, weight = 1)
+
+        self.procedure_builder_frame = ProcedureBuilderFrame(master = self)
+        self.procedure_builder_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
+        self.procedure_builder_frame.grid_remove()
+
+        self.procedure_viewer_frame = ProcedureLogFrame(master = self)
+        self.procedure_viewer_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
+        self.procedure_viewer_frame.grid_remove()
+
+        self.settings_frame = SettingsFrame(master = self)
+        self.settings_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
+        self.settings_frame.grid_remove()
+
+        self.file_manager_frame = FileManagerFrame(master = self)
+        self.file_manager_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
+        self.file_manager_frame.grid_remove()
+
+        self.frames = {
+            "procedure_builder": self.procedure_builder_frame,
+            "procedure_viewer": self.procedure_viewer_frame,
+            "file_manager": self.file_manager_frame,
+            "settings": self.settings_frame
+        }
+
+        self.current_tab_name = "file_manager" 
+        self.frames[self.current_tab_name].grid()
+
+    def goto_tab(self, tab):
+        if self.current_tab_name == tab:
+            return
+        if not(tab in TABS):
+            raise TypeError("tab does not exist")
+
+        old_frame = self.frames[self.current_tab_name]
+        new_frame = self.frames[tab]
+
+        old_frame.grid_remove()
+        new_frame.grid()
+
+        self.current_tab_name = tab
         
-        self.rowconfigure(1, weight = 1)
-        
-        self.unselected_file_image = self.path_to_ctk_image("gui/icons/unselected_file.png")
-        self.selected_file_image = self.path_to_ctk_image("gui/icons/selected_file.png")
-
-        self.file_button = ctk.CTkButton(
-            master = self,
-            width = 60, 
-            height = 60, 
-            corner_radius = 0,
-            fg_color = PRIMARY_BUTTON_COLOR,
-            hover_color = HOVER_BUTTON_COLOR,
-            text = "1",
-            font = ("Roboto", 10)
-        )
-        self.file_button.grid(row = 0, column = 0, padx = 5, pady = 5, sticky = "new")
-
-        self.bottom_button = ctk.CTkButton(
-            master = self,
-            width = 60, 
-            height = 60, 
-            corner_radius = 0,
-            fg_color = FOREGROUND_COLOR,
-            hover_color = FOREGROUND_COLOR,
-            image = self.unselected_file_image,
-            text = ""
-        )
-        self.bottom_button.grid(row = 2, column = 0, padx = 5, pady = 5, sticky = "sew")
-        self.frame_image_bindings(self.bottom_button, self.unselected_file_image, self.selected_file_image)
-
-        self.master.bind("<Configure>",lambda event: self.hide_overlapping_frames(disp_frame = self.file_button, hide_frame = self.bottom_button))
-
-    def hide_overlapping_frames(self, disp_frame = None, hide_frame = None, event=None):
-
-        self.update_idletasks()
-
-        required_height = (
-            disp_frame.winfo_reqheight() +
-            hide_frame.winfo_reqheight() +
-            20
-        )
-
-        if self.winfo_height() < required_height:
-            hide_frame.grid_remove()
-        else:
-            if not hide_frame.winfo_ismapped():
-                hide_frame.grid()
-    
-    def path_to_ctk_image(self, image_path):
-        if image_path is None:
-            raise ValueError("image_path must be provided")
-
-        return ctk.CTkImage(
-            light_image=Image.open(image_path),
-            dark_image=Image.open(image_path),
-            size=(40, 40)
-        )
-    
-    def frame_image_bindings(self, widget, image_normal, image_hover):
-        widget.bind("<Enter>", lambda e: widget.configure(image=image_hover))
-        widget.bind("<Leave>", lambda e: widget.configure(image=image_normal))
+        print("Tab Set To "+ self.current_tab_name )

@@ -1,3 +1,4 @@
+import customtkinter as ctk
 
 def is_overlapping(widget1, widget2):
     # Get bounding box for widget 1
