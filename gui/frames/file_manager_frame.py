@@ -9,5 +9,5 @@ class FileManagerFrame(ctk.CTkFrame):
             width = 730,
             height = 800,
             corner_radius = 0,
-            fg_color = SPECIAL_TEXT_COLOR
+            fg_color = BACKGROUND_COLOR
         )

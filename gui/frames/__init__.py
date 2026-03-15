@@ -5,7 +5,8 @@ from .file_manager_frame import FileManagerFrame
 from .info_frame import InfoFrame
 from .locations_frame import LocationsFrame
 from .procedure_builder_frame import ProcedureBuilderFrame
-from .procedure_log_frame import ProcedureLogFrame
+from .procedure_queue_frame import ProcedureQueueFrame
+from .procedure_viewer_frame import ProcedureViewerFrame
 from .settings_frame import SettingsFrame
 from .spectrometer_frame import SpectrometerFrame
 from .tab_manager_frame import TabManagerFrame

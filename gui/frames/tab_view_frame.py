@@ -1,7 +1,7 @@
 import customtkinter as ctk
 from ..components.constants import *
 
-from ..frames import FileManagerFrame, ProcedureBuilderFrame, ProcedureLogFrame, SettingsFrame
+from ..frames import FileManagerFrame, ProcedureBuilderFrame, ProcedureViewerFrame, SettingsFrame
 
 class TabViewFrame(ctk.CTkFrame):
     """Shell for managing ___, ___, and ____ tabs"""
@@ -9,10 +9,11 @@ class TabViewFrame(ctk.CTkFrame):
         super().__init__(
             master,
             width = 930,
-            height = 650,
+            height = 700,
             corner_radius = 0,
             fg_color = FOREGROUND_COLOR
         )
+
         self.columnconfigure(0, weight = 1)
         self.rowconfigure(0, weight = 1)
 
@@ -20,7 +21,7 @@ class TabViewFrame(ctk.CTkFrame):
         self.procedure_builder_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
         self.procedure_builder_frame.grid_remove()
 
-        self.procedure_viewer_frame = ProcedureLogFrame(master = self)
+        self.procedure_viewer_frame = ProcedureViewerFrame(master = self)
         self.procedure_viewer_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
         self.procedure_viewer_frame.grid_remove()
 

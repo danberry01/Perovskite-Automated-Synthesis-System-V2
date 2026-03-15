@@ -38,8 +38,8 @@ class TabManagerFrame(ctk.CTkFrame):
         # File tab button
         self.file_tab_button = ctk.CTkButton(
             master = self,
-            width = 75, 
-            height = 75, 
+            width = 70, 
+            height = 70, 
             corner_radius = 0,
             fg_color = FOREGROUND_COLOR,
             hover_color = FOREGROUND_COLOR,
@@ -48,15 +48,15 @@ class TabManagerFrame(ctk.CTkFrame):
             command = lambda: self.controller.switch_tab("file_manager") 
         )
 
-        self.file_tab_button.grid(row = 0, column = 0, padx = 5, pady = 5, sticky = "new") # Establishes grid placement
+        self.file_tab_button.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "new") # Establishes grid placement
         self.frame_image_bindings(self.file_tab_button, self.unselected_file_image, self.selected_file_image) #Binds the hover actions to file icon replacement
 
 
         # Builder tab button
         self.builder_tab_button = ctk.CTkButton(
             master = self,
-            width = 75, 
-            height = 75, 
+            width = 70, 
+            height = 70, 
             corner_radius = 0,
             fg_color = FOREGROUND_COLOR,
             hover_color = FOREGROUND_COLOR,
@@ -64,15 +64,14 @@ class TabManagerFrame(ctk.CTkFrame):
             text = "",
             command = lambda: self.controller.switch_tab("procedure_builder") 
         )
-        self.builder_tab_button.grid(row = 1, column = 0, padx = 5, pady = 5, sticky = "new") # Establishes grid placement
+        self.builder_tab_button.grid(row = 1, column = 0, padx = 0, pady = 0, sticky = "new") # Establishes grid placement
         self.frame_image_bindings(self.builder_tab_button, self.unselected_builder_image, self.selected_builder_image) #Binds the hover actions to file icon replacement
-
 
         # Builder tab button
         self.procedure_tab_button = ctk.CTkButton(
             master = self,
-            width = 75, 
-            height = 75, 
+            width = 70, 
+            height = 70, 
             corner_radius = 0,
             fg_color = FOREGROUND_COLOR,
             hover_color = FOREGROUND_COLOR,
@@ -80,14 +79,13 @@ class TabManagerFrame(ctk.CTkFrame):
             text = "",
             command = lambda: self.controller.switch_tab("procedure_viewer") 
         )
-        self.procedure_tab_button.grid(row = 2, column = 0, padx = 5, pady = 5, sticky = "new") # Establishes grid placement
+        self.procedure_tab_button.grid(row = 2, column = 0, padx = 0, pady = 0, sticky = "new") # Establishes grid placement
         self.frame_image_bindings(self.procedure_tab_button, self.unselected_procedure_image, self.selected_procedure_image) #Binds the hover actions to file icon replacement
-
 
         self.settings_tab_button = ctk.CTkButton(
             master = self,
-            width = 75, 
-            height = 75, 
+            width = 70, 
+            height = 70, 
             corner_radius = 0,
             fg_color = FOREGROUND_COLOR,
             hover_color = FOREGROUND_COLOR,
@@ -95,11 +93,12 @@ class TabManagerFrame(ctk.CTkFrame):
             text = "",
             command = lambda: self.controller.switch_tab("settings") 
         )
-        self.settings_tab_button.grid(row = 4, column = 0, padx = 5, pady = 5, sticky = "sew")
+        self.settings_tab_button.grid(row = 4, column = 0, padx = 0, pady = 0, sticky = "sew")
         self.frame_image_bindings(self.settings_tab_button, self.unselected_settings_image, self.selected_settings_image) #Binds the hover actions to file icon replacement
-
         # Binds buttons on bottom to dissapear when tab selection buttons collide
         self.master.bind("<Configure>",lambda e: self.hide_overlapping_frames(disp_frame = self.procedure_tab_button, hide_frame = self.settings_tab_button))
+
+        # self.frame_exclusive_color_bindings(self.file_tab_button, self.procedure_tab_button, self.builder_tab_button)
 
     def hide_overlapping_frames(self, disp_frame = None, hide_frame = None, event=None):
 
@@ -131,6 +130,25 @@ class TabManagerFrame(ctk.CTkFrame):
         widget.bind("<Enter>", lambda e: widget.configure(image=image_hover))
         widget.bind("<Leave>", lambda e: widget.configure(image=image_normal))
 
+    # def frame_exclusive_color_bindings(self, widget_one, widget_two, widget_three):
+    #     widget_one.bind("<Button>", lambda e: [
+    #         widget_one.configure(fg_color = BACKGROUND_COLOR),
+    #         widget_two.configure(fg_color = FOREGROUND_COLOR),
+    #         widget_three.configure(fg_color = FOREGROUND_COLOR)
+    #     ])
+
+    #     widget_two.bind("<Button>", lambda e: [
+    #         widget_two.configure(fg_color = BACKGROUND_COLOR),
+    #         widget_three.configure(fg_color = FOREGROUND_COLOR),
+    #         widget_one.configure(fg_color = FOREGROUND_COLOR)
+    #     ])
+
+    #     widget_three.bind("<Button>", lambda e: [
+    #         widget_three.configure(fg_color = BACKGROUND_COLOR),
+    #         widget_one.configure(fg_color = FOREGROUND_COLOR),
+    #         widget_two.configure(fg_color = FOREGROUND_COLOR)
+    #     ])
+
     def set_next_tab(self, tab):
         if self.current_tab == tab:
             print("Tab Already Set!")
@@ -139,5 +157,5 @@ class TabManagerFrame(ctk.CTkFrame):
             raise TypeError("tab does not exist")
 
         self.current_tab = tab
-        print("next tab set: "+ self.current_tab )
+        print("next tab set: " + self.current_tab )
 

@@ -9,7 +9,7 @@ ctk.set_default_color_theme("green")
 class App(ctk.CTk):
     """Application for Perovskite Automated Synthesis System"""
     def __init__(self):
-        super().__init__(fg_color = BACKGROUND_COLOR)
+        super().__init__(fg_color = FOREGROUND_COLOR)
 
         # If run from main, takes the file path 
         current_directory = os.path.dirname(os.path.abspath(__file__))

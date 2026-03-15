@@ -7,7 +7,7 @@ class InfoFrame(ctk.CTkFrame):
             super().__init__(
                 master,
                 width = 730,
-                height = 150,
+                height = 100,
                 corner_radius = 0,
-                fg_color = FOREGROUND_COLOR
+                fg_color = FOREGROUND_COLOR_TWO
             )
