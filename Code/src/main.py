@@ -23,18 +23,19 @@ from objects.pippete import Pipette, PipetteHandler
 from objects.toolhead import Toolhead
 
 # -- GUI IMPORT --
-from guiFrames.console_frame import ConsoleFrame
-from guiFrames.procedure_frame import ProcedureFrame
-from guiFrames.info_frame import InfoFrame
-from guiFrames.camera_frame import CameraFrame
-from guiFrames.conection_frame import ConnectionFrame
-from guiFrames.procedure_builder_frame import ProcedureBuilderFrame
-from guiFrames.spectrometer_frame import SpectrometerFrame
-from guiFrames.locations_frame import LocationFrame
+# from guiFrames.console_frame import ConsoleFrame
+# from guiFrames.procedure_frame import ProcedureFrame
+# from guiFrames.info_frame import InfoFrame
+# from guiFrames.camera_frame import CameraFrame
+# from guiFrames.conection_frame import ConnectionFrame
+# from guiFrames.procedure_builder_frame import ProcedureBuilderFrame
+# from guiFrames.spectrometer_frame import SpectrometerFrame
+# from guiFrames.locations_frame import LocationFrame
 # from guiFrames.ml_model_frame import MLModelFrame
 
 from procedure_handler import ProcedureHandler
 from moves import Dispatcher
+from gui import *
 
 if __name__ == "__main__":
     #enable software pwm
@@ -92,12 +93,7 @@ if __name__ == "__main__":
     vial_carousel = VialCarousel(control_board)
 
     # -- GUI --
-    app = ctk.CTk()
-    ctk.set_appearance_mode("light")
-    app.geometry("1200x1000")
-    app.title("ECD 615 - Perovskite Automated Synthesis System V2")
-    
-    spectrometer_frame = SpectrometerFrame(master=app, spectrometer=spectrometer)
+    app = App()
     
     dispatcher = Dispatcher(toolhead=toolhead,
                             spin_coater=spin_coater,
@@ -132,33 +128,33 @@ if __name__ == "__main__":
         logger.warning("Default procedure not found")
 
 
-    # trying to make an icon 
-    icon = PhotoImage(file="guiImages/logo.png")
-    app.wm_iconphoto(True, icon)
+    # # trying to make an icon 
+    # icon = PhotoImage(file="guiImages/logo.png")
+    # app.wm_iconphoto(True, icon)
 
-    # creating frames
-    procedure_frame = ProcedureFrame(app, procedure_handler)
-    console_frame = ConsoleFrame(app)
-    connection_frame = ConnectionFrame(app, control_board,spin_coater,hotplate,camera,spectrometer)
-    camera_frame = CameraFrame(app, camera)
-    info_frame = InfoFrame(app, control_board, hotplate, pipette_handler, vial_carousel)
-    procedure_builder_frame = ProcedureBuilderFrame(app, dispatcher.move_dict, procedure_handler)
-    location_frame = LocationFrame(master=app)
-    # ml_model_frame = MLModelFrame(app, width=370)
+    # # creating frames
+    # procedure_frame = ProcedureFrame(app, procedure_handler)
+    # console_frame = ConsoleFrame(app)
+    # connection_frame = ConnectionFrame(app, control_board,spin_coater,hotplate,camera,spectrometer)
+    # camera_frame = CameraFrame(app, camera)
+    # info_frame = InfoFrame(app, control_board, hotplate, pipette_handler, vial_carousel)
+    # procedure_builder_frame = ProcedureBuilderFrame(app, dispatcher.move_dict, procedure_handler)
+    # location_frame = LocationFrame(master=app)
+    # # ml_model_frame = MLModelFrame(app, width=370)
     
-    # putting the frames on the gui
-    procedure_frame.grid(row=0, column=0, padx=5, pady=5,sticky="nsew")
-    connection_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-    spectrometer_frame.grid(row=0, column=2, padx=10, pady=10, sticky="nsew")
-    console_frame.grid(row=1, column=0, padx=5, pady=5,sticky="nsew")
-    procedure_builder_frame.grid(row=1, column=1, rowspan=2, sticky="nsew")
-    camera_frame.grid(row=1, column=2, padx=5, pady=5,sticky="new")
-    info_frame.grid(row=2, column=0, padx=5, pady=5, sticky="new")
-    location_frame.grid(row=2, column=2,padx=5, pady=5, sticky="new")
-    # ml_model_frame.grid(row=1, column=2, padx=5, pady=5,sticky="new")
+    # # putting the frames on the gui
+    # procedure_frame.grid(row=0, column=0, padx=5, pady=5,sticky="nsew")
+    # connection_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+    # spectrometer_frame.grid(row=0, column=2, padx=10, pady=10, sticky="nsew")
+    # console_frame.grid(row=1, column=0, padx=5, pady=5,sticky="nsew")
+    # procedure_builder_frame.grid(row=1, column=1, rowspan=2, sticky="nsew")
+    # camera_frame.grid(row=1, column=2, padx=5, pady=5,sticky="new")
+    # info_frame.grid(row=2, column=0, padx=5, pady=5, sticky="new")
+    # location_frame.grid(row=2, column=2,padx=5, pady=5, sticky="new")
+    # # ml_model_frame.grid(row=1, column=2, padx=5, pady=5,sticky="new")
 
-    # run the gui
-    hotplate.set_temperature(0)
+    # # run the gui
+    # hotplate.set_temperature(0)
     app.mainloop()
     
     # -- CLEANUP --

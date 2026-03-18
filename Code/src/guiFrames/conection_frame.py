@@ -3,6 +3,7 @@ from PIL import Image
 import sys
 import os
 
+
 # get current directory so we can import from outside guiFrames folder
 path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
 sys.path.append(path)
