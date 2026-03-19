@@ -95,17 +95,17 @@ if __name__ == "__main__":
     # -- GUI --
     app = App()
     
-    dispatcher = Dispatcher(toolhead=toolhead,
-                            spin_coater=spin_coater,
-                            hotplate=hotplate,
-                            camera=camera,
-                            gripper=gripper,
-                            infeed=infeed,
-                            spectrometer=spectrometer,
-                            vial_carousel=vial_carousel,
-                            pippete_handler=pipette_handler,
-                            spectromeer_frame=spectrometer_frame, 
-                            tip_matrix=tip_matrix)
+    # dispatcher = Dispatcher(toolhead=toolhead,
+    #                         spin_coater=spin_coater,
+    #                         hotplate=hotplate,
+    #                         camera=camera,
+    #                         gripper=gripper,
+    #                         infeed=infeed,
+    #                         spectrometer=spectrometer,
+    #                         vial_carousel=vial_carousel,
+    #                         pippete_handler=pipette_handler,
+    #                         spectromeer_frame=spectrometer_frame, 
+    #                         tip_matrix=tip_matrix)
     
     # procedure_handler = ProcedureHandler(dispatcher=dispatcher)
     
