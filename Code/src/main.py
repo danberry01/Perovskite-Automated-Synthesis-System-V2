@@ -5,22 +5,22 @@ from gpiozero import AngularServo, Device
 from gpiozero.pins.pigpio import PiGPIOFactory
 from time import sleep
 
-# # -- DRIVER IMPORT --
-# from drivers.controlboard_driver import ControlBoard
-# from drivers.spincoater_driver import SpinCoater
-# from drivers.camera_driver import Camera
-# from drivers.procedure_file_driver import ProcedureFile
-# from drivers.spectrometer_driver import Spectrometer
-# # from drivers import ml_driver
+# -- DRIVER IMPORT --
+from drivers.controlboard_driver import ControlBoard
+from drivers.spincoater_driver import SpinCoater
+from drivers.camera_driver import Camera
+from drivers.procedure_file_driver import ProcedureFile
+from drivers.spectrometer_driver import Spectrometer
+# from drivers import ml_driver
 
-# # -- OBJECT IMPORT --
-# from objects.tip_matrix import TipMatrix
-# from objects.vial_carousel import VialCarousel
-# from objects.infeed import Infeed
-# from objects.hotplate import Hotplate
-# from objects.gripper import Gripper
-# from objects.pippete import Pipette, PipetteHandler
-# from objects.toolhead import Toolhead
+# -- OBJECT IMPORT --
+from objects.tip_matrix import TipMatrix
+from objects.vial_carousel import VialCarousel
+from objects.infeed import Infeed
+from objects.hotplate import Hotplate
+from objects.gripper import Gripper
+from objects.pippete import Pipette, PipetteHandler
+from objects.toolhead import Toolhead
 
 # -- GUI IMPORT --
 # from guiFrames.console_frame import ConsoleFrame
@@ -35,7 +35,7 @@ from time import sleep
 
 from procedure_handler import ProcedureHandler
 from moves import Dispatcher
-from gui import *
+from gui import App
 
 if __name__ == "__main__":
     # #enable software pwm
@@ -95,17 +95,17 @@ if __name__ == "__main__":
     # -- GUI --
     app = App()
     
-    # dispatcher = Dispatcher(toolhead=toolhead,
-    #                         spin_coater=spin_coater,
-    #                         hotplate=hotplate,
-    #                         camera=camera,
-    #                         gripper=gripper,
-    #                         infeed=infeed,
-    #                         spectrometer=spectrometer,
-    #                         vial_carousel=vial_carousel,
-    #                         pippete_handler=pipette_handler,
-    #                         spectrometer_frame = spectrometer_frame, 
-    #                         tip_matrix=tip_matrix)
+    dispatcher = Dispatcher(toolhead=toolhead,
+                            spin_coater=spin_coater,
+                            hotplate=hotplate,
+                            camera=camera,
+                            gripper=gripper,
+                            infeed=infeed,
+                            spectrometer=spectrometer,
+                            vial_carousel=vial_carousel,
+                            pippete_handler=pipette_handler,
+                            spectromeer_frame=spectrometer_frame, 
+                            tip_matrix=tip_matrix)
     
     # procedure_handler = ProcedureHandler(dispatcher=dispatcher)
     

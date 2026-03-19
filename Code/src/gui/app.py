@@ -12,12 +12,12 @@ class App(ctk.CTk):
         super().__init__(fg_color = FOREGROUND_COLOR)
 
         # If run from main, takes the file path 
-        current_directory = os.path.dirname(os.path.abspath(__file__))
-        cat_icon_path = os.path.join(current_directory, "icons", "cat.ico")
+        self.current_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.cat_icon_path = os.path.join(self.current_directory, "icons", "cat.ico")
 
         # Define the window
         self.title("Perovskite Automated Synthesis System V2")
-        self.iconbitmap(cat_icon_path)
+        self.iconbitmap(self.cat_icon_path)
         self.geometry("1000x800")
 
         self.grid_rowconfigure(0, weight = 1)
