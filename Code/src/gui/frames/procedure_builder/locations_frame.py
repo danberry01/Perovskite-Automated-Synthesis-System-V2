@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from ..components.constants import *
+from ...components.constants import *
 
 class LocationsFrame(ctk.CTkFrame):
     """Frame to display locations list (might remove)"""

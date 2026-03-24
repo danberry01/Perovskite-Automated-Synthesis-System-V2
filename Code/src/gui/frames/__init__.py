@@ -1,13 +1,22 @@
-from .camera_frame import CameraFrame
-from .connection_frame import ConnectionFrame
-from .console_frame import ConsoleFrame
 from .file_manager_frame import FileManagerFrame
 from .info_frame import InfoFrame
-from .locations_frame import LocationsFrame
-from .procedure_builder_frame import ProcedureBuilderFrame
-from .procedure_queue_frame import ProcedureQueueFrame
-from .procedure_viewer_frame import ProcedureViewerFrame
 from .settings_frame import SettingsFrame
-from .spectrometer_frame import SpectrometerFrame
 from .tab_manager_frame import TabManagerFrame
 from .tab_view_frame import TabViewFrame
+
+from .procedure_builder import *
+from .procedure_viewer import *
+
+PROCEDURE_BUILDER = [
+    "ConnectionFrame",
+    "LocationsFrame",
+    "ProcedureBuilderFrame"
+]
+
+PROCEDURE_VIEWER = [
+    "CameraFrame",
+    "ConsoleFrame",
+    "ProcedureQueueFrame",
+    "ProcedureViewerFrame",
+    "SpectrometerFrame"
+]

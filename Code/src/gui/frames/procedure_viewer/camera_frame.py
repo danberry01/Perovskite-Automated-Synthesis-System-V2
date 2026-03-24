@@ -3,13 +3,14 @@ import cv2
 import cv2.aruco as aruco
 import numpy as np
 from PIL import Image, ImageTk
-from ..components.constants import *
+from ...components.constants import *
 
 class CameraFrame(ctk.CTkFrame):
     """Frame for displaying camera feed with coordinate projection, and filter buttons"""
     def __init__(self, master, **kwargs):
-        super().__init__(master, fg_color = FOREGROUND_COLOR)
+        super().__init__(master, fg_color = FOREGROUND_COLOR, corner_radius = 0)
         
+
         # Geometry data for what the pose detector expects
         self.data = np.load("gui/components/calibration_data.npz")
         self.camera_matrix = self.data["camera_matrix"]

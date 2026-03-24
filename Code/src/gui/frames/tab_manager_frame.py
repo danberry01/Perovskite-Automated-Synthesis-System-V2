@@ -2,8 +2,6 @@ import customtkinter as ctk
 from PIL import Image
 
 from ..components.constants import *
-from ..components.helper_functions import is_overlapping
-from .tab_view_frame import TabViewFrame
 
 class TabManagerFrame(ctk.CTkFrame):
     """Frame for Displaying different tab options"""

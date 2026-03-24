@@ -1,7 +1,10 @@
 import customtkinter as ctk
 from ..components.constants import *
 
-from ..frames import FileManagerFrame, ProcedureBuilderFrame, ProcedureViewerFrame, SettingsFrame
+from ..frames import FileManagerFrame, SettingsFrame
+
+from .procedure_viewer import ProcedureViewerFrame
+from .procedure_builder import ProcedureBuilderFrame
 
 class TabViewFrame(ctk.CTkFrame):
     """Shell for managing ___, ___, and ____ tabs"""
