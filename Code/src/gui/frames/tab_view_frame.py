@@ -36,6 +36,8 @@ class TabViewFrame(ctk.CTkFrame):
         self.file_manager_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
         self.file_manager_frame.grid_remove()
 
+        # Dictionary so the goto_tab correctly maps a tab with its frame. 
+        # Note: In future development, these names should be linked with their constants in components/constants.py for clarity
         self.frames = {
             "procedure_builder": self.procedure_builder_frame,
             "procedure_viewer": self.procedure_viewer_frame,

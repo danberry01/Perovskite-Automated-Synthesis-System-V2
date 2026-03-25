@@ -18,7 +18,7 @@ class App(ctk.CTk):
         # Define the window
         self.title("Perovskite Automated Synthesis System V2")
         # self.iconbitmap(self.cat_icon_path)
-        self.geometry("1000x800")
+        self.geometry("1600x800")
 
         self.grid_rowconfigure(0, weight = 1)
         self.grid_rowconfigure(1, weight = 0)
