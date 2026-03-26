@@ -48,67 +48,70 @@ if __name__ == "__main__":
     # logger.addHandler(console_handler)
     # logger.setLevel(logging.DEBUG)
     
-    # # -- CONTROL BOARD --
-    # control_board = ControlBoard()
+    # -- CONTROL BOARD --
+    control_board = ControlBoard()
     
-    # # -- TOOLHEAD --
-    # toolhead = Toolhead(control_board=control_board)
+    # -- TOOLHEAD --
+    toolhead = Toolhead(control_board=control_board)
     
-    # # -- SPIN COATER --
-    # spin_coater= SpinCoater()
+    # -- SPIN COATER --
+    spin_coater= SpinCoater()
 
     # # -- CAMERA --
-    # camera = Camera()
+    camera = Camera()
 
-    # # -- GRIPPER --
-    # arm_servo = AngularServo(pin=17, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    # arm_servo.angle = 20
-    # finger_servo = AngularServo(pin=18, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    # finger_servo.angle=40
-    # gripper = Gripper(arm_servo=arm_servo, finger_servo=finger_servo)
+    # -- GRIPPER --
+    arm_servo = AngularServo(pin=17, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
+    arm_servo.angle = 20
+    finger_servo = AngularServo(pin=18, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
+    finger_servo.angle=40
+    gripper = Gripper(arm_servo=arm_servo, finger_servo=finger_servo)
     
-    # # -- PIPETTE HANDLER --
-    # tip_eject_servo = AngularServo(pin=27, min_angle=0, max_angle=270, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    # grabber_servo = AngularServo(pin=22, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    # grabber_servo.angle = 180
-    # pipettes = [Pipette(200, 97, 17, 3, False),
-    #             Pipette(1000, 97, 17, 3, True)]
-    # pipette_handler = PipetteHandler(control_board=control_board,
-    #                                  tip_eject_servo=tip_eject_servo, grabber_servo=grabber_servo,
-    #                                  pipettes=pipettes)
+    # -- PIPETTE HANDLER --
+    tip_eject_servo = AngularServo(pin=27, min_angle=0, max_angle=270, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
+    grabber_servo = AngularServo(pin=22, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
+    grabber_servo.angle = 180
+    pipettes = [Pipette(200, 97, 17, 3, False),
+                Pipette(1000, 97, 17, 3, True)]
+    pipette_handler = PipetteHandler(control_board=control_board,
+                                     tip_eject_servo=tip_eject_servo, grabber_servo=grabber_servo,
+                                     pipettes=pipettes)
     
-    # # -- HOTPLATE --
-    # hotplate = Hotplate()
-    # # -- SPECTROMETER + INFEED --
-    # spectrometer = Spectrometer()
+    # -- HOTPLATE --
+    hotplate = Hotplate()
+    # -- SPECTROMETER + INFEED --
+    spectrometer = Spectrometer()
     
     
-    # # -- TIP MATRIX --
-    # tip_matrix = TipMatrix()
+    # -- TIP MATRIX --
+    tip_matrix = TipMatrix()
   
-    # infeed_servo = AngularServo(pin=24, min_angle=0, max_angle=180,min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    # infeed = Infeed(infeed_servo)
+    infeed_servo = AngularServo(pin=24, min_angle=0, max_angle=180,min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
+    infeed = Infeed(infeed_servo)
     
-    # # -- VIAL CAROUSEL --
-    # vial_carousel = VialCarousel(control_board)
+    # -- VIAL CAROUSEL --
+    vial_carousel = VialCarousel(control_board)
 
     # -- GUI --
-    app = App()
     
-    # dispatcher = Dispatcher(toolhead=toolhead,
-    #                         spin_coater=spin_coater,
-    #                         hotplate=hotplate,
-    #                         camera=camera,
-    #                         gripper=gripper,
-    #                         infeed=infeed,
-    #                         spectrometer=spectrometer,
-    #                         vial_carousel=vial_carousel,
-    #                         pippete_handler=pipette_handler,
-    #                         spectromeer_frame=spectrometer_frame, 
-    #                         tip_matrix=tip_matrix)
+    dispatcher = Dispatcher(
+        toolhead=toolhead,
+        spin_coater=spin_coater,
+        hotplate=hotplate,
+        camera=camera,
+        gripper=gripper,
+        infeed=infeed,
+        spectrometer=spectrometer,
+        vial_carousel=vial_carousel,
+        pippete_handler=pipette_handler,
+        spectromeer_frame=spectrometer_frame, 
+        tip_matrix=tip_matrix
+    )
     
-    # procedure_handler = ProcedureHandler(dispatcher=dispatcher)
+    procedure_handler = ProcedureHandler(dispatcher=dispatcher)
     
+    app = App(dispatcher)
+
     # # program stalls when not everything is connected and this is called
     # # # connect to devices
     # # spectrometer.connect()
