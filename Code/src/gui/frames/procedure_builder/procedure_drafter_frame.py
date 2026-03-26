@@ -117,7 +117,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             fg_color=PLAIN_TEXT_COLOR,
             command=self.quick_run
         )
-        self.save_button.grid(row=5, column=1, padx=10, pady=5, sticky="new")
+        self.quick_run_button.grid(row=5, column=1, padx=10, pady=5, sticky="new")
 
     def add_step(self):
         self.save_state()
