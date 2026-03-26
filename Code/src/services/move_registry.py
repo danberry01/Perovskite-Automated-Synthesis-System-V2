@@ -27,7 +27,7 @@ class MoveRegistry():
         
         self.toolhead = dispatcher.toolhead
         self.infeed = dispatcher.infeed
-        self.pippete_handler = dispatcher.pippete_handler
+        self.pipette_handler = dispatcher.pippete_handler
         self.spin_coater = dispatcher.spin_coater
         self.camera = dispatcher.camera
         self.gripper = dispatcher.gripper
