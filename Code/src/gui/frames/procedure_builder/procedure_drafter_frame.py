@@ -131,6 +131,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
 
         self.refresh_steps()
 
+
     # NEW: remove function
     def remove_step(self):
         if self.selected_index is None:
