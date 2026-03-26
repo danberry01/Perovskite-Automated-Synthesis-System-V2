@@ -23,8 +23,8 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
 
         # CustomTKinter Frames
         self.procedure_drafter_frame = ProcedureDrafterFrame(master = self, 
-                                                             move_registry = self.move_registry,
                                                              dispatcher = self.dispatcher,
+                                                             move_registry = self.move_registry,
                                                              procedure_handler = self.procedure_handler
                                                             )
         self.procedure_drafter_frame.grid(row = 0, column = 0, rowspan = 3, padx = 10, pady = 10, sticky = "nsew")
