@@ -29,6 +29,3 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
 
         self.locations_frame = LocationsFrame(master = self)
         self.locations_frame.grid(row = 1, column = 1, padx = 10, pady = 10, sticky = "nsew")
-        
-        # self.spectrometer_frame = SpectrometerFrame(master = self)
-        # self.spectrometer_frame.grid(row = 2, column = 1, padx = 10, pady = 10, sticky = "nsew")
