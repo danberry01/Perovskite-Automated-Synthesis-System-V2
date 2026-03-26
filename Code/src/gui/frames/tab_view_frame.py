@@ -8,7 +8,7 @@ from .procedure_builder import ProcedureBuilderFrame
 
 class TabViewFrame(ctk.CTkFrame):
     """Shell for managing ___, ___, and ____ tabs"""
-    def __init__(self, master, move_registry, **kwargs):
+    def __init__(self, master, dispatcher, move_registry, **kwargs):
         super().__init__(
             master,
             width = 930,
@@ -17,12 +17,13 @@ class TabViewFrame(ctk.CTkFrame):
             fg_color = FOREGROUND_COLOR
         )
 
+        self.dispatcher = dispatcher
         self.move_registry = move_registry
 
         self.columnconfigure(0, weight = 1)
         self.rowconfigure(0, weight = 1)
 
-        self.procedure_builder_frame = ProcedureBuilderFrame(master = self, move_registry = self.move_registry)
+        self.procedure_builder_frame = ProcedureBuilderFrame(master = self, dispatcher = self.dispatcher move_registry = self.move_registry)
         self.procedure_builder_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
         self.procedure_builder_frame.grid_remove()
 
