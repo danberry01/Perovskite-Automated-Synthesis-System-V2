@@ -34,7 +34,7 @@ class MoveRegistry():
         self.hotplate = dispatcher.hotplate
         self.vial_carousel = dispatcher.vial_carousel
         self.spectrometer = dispatcher.spectrometer
-        self.spectrometer_frame = dispatcher.spectrometer_frame
+        self.spectrometer_frame = None
         self.tip_matrix = dispatcher.tip_matrix
         self.slide_matrix = SlideMatrix()
         
