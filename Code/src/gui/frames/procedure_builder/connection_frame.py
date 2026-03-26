@@ -3,6 +3,8 @@ from PIL import Image
 import sys
 import os
 
+from ...components.constants import *
+
 
 # get current directory so we can import from outside guiFrames folder
 path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
@@ -15,7 +17,7 @@ from drivers.spectrometer_driver import Spectrometer
 
 class ConnectionFrame(ctk.CTkFrame):
     def __init__(self, master, dispatcher):  # Add spectrometer parameter
-        super().__init__(master=master,border_color="#1f6aa5",border_width=2,height=400,corner_radius=0 )
+        super().__init__(master=master,fg_color = FOREGROUND_COLOR,height=400,corner_radius=0 )
 
         self.control_board = dispatcher.control_board
         self.spin_coater = dispatcher.spin_coater
@@ -33,6 +35,7 @@ class ConnectionFrame(ctk.CTkFrame):
         self.title_label.grid(
             row=0, column=0, columnspan=5, 
             padx=5, pady=5, sticky="nw")
+        
         # Control Board
         self.control_board_connection = NameLater(
             self, "controlboard.png",self._connect_control_board)
@@ -40,24 +43,28 @@ class ConnectionFrame(ctk.CTkFrame):
             row=1, column=0,
             padx=5,pady=5,
             sticky="nw")
+        
         # Spin Coater
         self.spin_coater_connection = NameLater(
             self, "spin_coater.png",self._connect_spin_coater)
         self.spin_coater_connection.grid(
             row=1, column=1,
             padx=5,pady=5,sticky="nw")
+        
         # Hotplate
         self.hotplate_connection = NameLater(
             self, "hotplate.png",self._connect_hotplate)
         self.hotplate_connection.grid(
             row=1, column=2,
             padx=5,pady=5,sticky="nw")
+        
         # Spectrometer
         self.spectrometer_connection = NameLater(
             self, "spectrometer.png",self._connect_spectrometer)
         self.spectrometer_connection.grid(
             row=1, column=3,
             padx=5,pady=5,sticky="nw")
+        
         # Camera
         self.camera_connection = NameLater(
             self, "camera.png",self._connect_camera)
@@ -78,6 +85,10 @@ class ConnectionFrame(ctk.CTkFrame):
             master=self,
             values=["Control Board", "Spincoater", "Hotplate", "Spectrometer"],
             width=120,
+            fg_color = PLAIN_TEXT_COLOR,
+            button_color = PLAIN_TEXT_COLOR,
+            hover_color = FOREGROUND_COLOR_TWO,
+            corner_radius = 0,
             command=self._set_command_destination
         )
         self.command_entry_destination.grid(row=5, column=0, padx=5, pady=5, sticky="nw")
@@ -90,9 +101,15 @@ class ConnectionFrame(ctk.CTkFrame):
         self.command_entry.grid(row=4, column=1, rowspan=2, columnspan=3, padx=5, pady=5, sticky="nw")
         self.command_entry.bind("<Return>", self._send_entry)
         
+        # Send Button
         self.send_entry_button = ctk.CTkButton(
-            master=self,text="Send",
-            width=50,height=50,
+            master=self,
+            text="Send",
+            width=50,
+            height=50,
+            fg_color = PLAIN_TEXT_COLOR,
+            hover_color = FOREGROUND_COLOR_TWO,
+            corner_radius = 0,
             command=self._send_entry)
         self.send_entry_button.grid(
             row=4, column=4, rowspan=2,
@@ -173,8 +190,13 @@ class NameLater(ctk.CTkFrame):
             sticky="nw")
         # Connect button
         self.connect_button = ctk.CTkButton(
-            master=self, text="Connect",
-            width=100, height=20,
+            master=self, 
+            text="Connect",
+            fg_color = PLAIN_TEXT_COLOR,
+            hover_color = FOREGROUND_COLOR_TWO,
+            corner_radius = 0,
+            width=100, 
+            height=20,
             command=command)
         self.connect_button.grid(
             row=2, column=0, 
