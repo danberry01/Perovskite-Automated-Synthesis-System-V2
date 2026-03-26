@@ -112,6 +112,7 @@ if __name__ == "__main__":
     
     # -- GUI --
     app = App(dispatcher)
+    dispatcher.spectrometer_frame = app.spectrometer_frame
 
     # # program stalls when not everything is connected and this is called
     # # # connect to devices
