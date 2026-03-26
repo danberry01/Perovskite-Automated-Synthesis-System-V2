@@ -28,4 +28,4 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
         self.connection_frame.grid(row = 0, column = 1, padx = 10, pady = 10, sticky = "nsew")
 
         self.locations_frame = LocationsFrame(master = self)
-        self.locations_frame.grid(row = 1, column = 1, padx = 10, pady = 10, sticky = "nsew")
+        self.locations_frame.grid(row = 1, column = 1, rowspan = 2, padx = 10, pady = 10, sticky = "nsew")
