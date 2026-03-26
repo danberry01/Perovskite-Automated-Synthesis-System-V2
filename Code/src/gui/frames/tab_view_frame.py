@@ -23,7 +23,7 @@ class TabViewFrame(ctk.CTkFrame):
         self.columnconfigure(0, weight = 1)
         self.rowconfigure(0, weight = 1)
 
-        self.procedure_builder_frame = ProcedureBuilderFrame(master = self, dispatcher = self.dispatcher move_registry = self.move_registry)
+        self.procedure_builder_frame = ProcedureBuilderFrame(master = self, dispatcher = self.dispatcher, move_registry = self.move_registry)
         self.procedure_builder_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
         self.procedure_builder_frame.grid_remove()
 
