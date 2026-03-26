@@ -42,13 +42,14 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.grid_rowconfigure(2, weight=0)
         self.grid_rowconfigure(3, weight=0)
         self.grid_rowconfigure(4, weight=0)
-        self.grid_rowconfigure(5, weight=1)
+        self.grid_rowconfigure(5, weight=0)
+        self.grid_rowconfigure(6, weight=1)
 
         self.grid_columnconfigure(0, weight=4)  # drag area
         self.grid_columnconfigure(1, weight=0)  # controls
 
         self.drag_frame = ctk.CTkScrollableFrame(self, fg_color="#1f1f1f", corner_radius=0)
-        self.drag_frame.grid(row=0, column=0, rowspan=6, sticky="nsew", padx=10, pady=10)
+        self.drag_frame.grid(row=0, column=0, rowspan=7, sticky="nsew", padx=10, pady=10)
 
         # NEW: Current file label
         self.file_label = ctk.CTkLabel(
