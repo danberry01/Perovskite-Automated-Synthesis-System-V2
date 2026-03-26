@@ -106,7 +106,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         )
         self.save_button.grid(row=4, column=1, padx=10, pady=5, sticky="new")
 
-        self.save_button = ctk.CTkButton(
+        self.quick_run_button = ctk.CTkButton(
             self,
             height=60,
             corner_radius=0,
