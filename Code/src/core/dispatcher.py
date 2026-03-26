@@ -35,6 +35,7 @@ class Dispatcher:
         self.grabber_servo.angle = 180
         self.pipette_handler = PipetteHandler(control_board=self.control_board, tip_eject_servo=self.tip_eject_servo, grabber_servo=self.grabber_servo, pipettes=self.pipettes)
         
+        self.tip_matrix = TipMatrix()
         self.vial_carousel = VialCarousel(self.control_board)
         self.infeed = Infeed(AngularServo(pin=24, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000))
         self.gripper = Gripper(
