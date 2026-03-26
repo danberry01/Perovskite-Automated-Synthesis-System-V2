@@ -56,7 +56,7 @@ if __name__ == "__main__":
     procedure_handler = ProcedureHandler(move_registry = move_registry)
     
     # -- GUI --
-    app = App(move_registry)
+    app = App(move_registry, dispatcher)
     
     move_registry.spectrometer_frame = app.spectrometer_frame
 
