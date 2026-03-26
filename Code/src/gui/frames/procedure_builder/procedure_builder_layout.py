@@ -8,7 +8,7 @@ from .connection_frame import ConnectionFrame
 class ProcedureBuilderFrame(ctk.CTkFrame):
     """Complete interface for creating, saving, loading, and editing procedures"""
     def __init__(self, master, dispatcher, move_registry, procedure_handler, **kwargs):
-        super().__init__(master, fg_color = BACKGROUND_COLOR)
+        super().__init__(master, fg_color = BACKGROUND_COLOR, **kwargs)
 
         self.dispatcher = dispatcher
         self.move_registry = move_registry
@@ -22,11 +22,12 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
         self.rowconfigure(2, weight = 1)
 
         # CustomTKinter Frames
-        self.procedure_drafter_frame = ProcedureDrafterFrame(master = self, 
-                                                             dispatcher = self.dispatcher,
-                                                             move_registry = self.move_registry,
-                                                             procedure_handler = self.procedure_handler
-                                                            )
+        self.procedure_drafter_frame = ProcedureDrafterFrame(
+            master = self, 
+            dispatcher = self.dispatcher,
+            move_registry = self.move_registry,
+            procedure_handler = self.procedure_handler
+        )
         self.procedure_drafter_frame.grid(row = 0, column = 0, rowspan = 3, padx = 10, pady = 10, sticky = "nsew")
         
         self.connection_frame = ConnectionFrame(master = self, dispatcher = self.dispatcher)

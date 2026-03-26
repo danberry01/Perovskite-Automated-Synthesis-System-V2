@@ -33,11 +33,13 @@ class App(ctk.CTk):
         self.tab_manager_frame = TabManagerFrame(master = self, controller = self)
         self.tab_manager_frame.grid(row = 0, column = 0, rowspan = 2, padx = 0, pady = 0, sticky = "nsew")
         
-        self.tab_view_frame = TabViewFrame(master = self, controller = self, 
-                                           dispatcher = self.dispatcher, 
-                                           move_registry = self.move_registry, 
-                                           procedure_handler = self.procedure_handler
-                                        )
+        self.tab_view_frame = TabViewFrame(
+            master = self, 
+            controller = self, 
+            dispatcher = self.dispatcher, 
+            move_registry = self.move_registry, 
+            procedure_handler = self.procedure_handler
+        )
         self.tab_view_frame.grid(row = 0, column = 1, padx = 0, pady = 0, sticky = "nsew")
 
         self.info_frame = InfoFrame(master = self, controller = self)
