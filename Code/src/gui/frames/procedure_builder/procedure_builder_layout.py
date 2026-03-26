@@ -7,7 +7,7 @@ from .connection_frame import ConnectionFrame
 
 class ProcedureBuilderFrame(ctk.CTkFrame):
     """Complete interface for creating, saving, loading, and editing procedures"""
-    def __init__(self, master, dispatcher, move_registry, procedure_handler **kwargs):
+    def __init__(self, master, dispatcher, move_registry, procedure_handler, **kwargs):
         super().__init__(master, fg_color = BACKGROUND_COLOR)
 
         self.dispatcher = dispatcher
