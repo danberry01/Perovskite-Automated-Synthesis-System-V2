@@ -104,7 +104,7 @@ if __name__ == "__main__":
         spectrometer=spectrometer,
         vial_carousel=vial_carousel,
         pippete_handler=pipette_handler,
-        spectromeer_frame= None, 
+        spectrometer_frame= None, 
         tip_matrix=tip_matrix
     )
     
