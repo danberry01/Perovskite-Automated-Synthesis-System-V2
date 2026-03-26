@@ -27,7 +27,7 @@ class MoveRegistry():
         
         self.toolhead = dispatcher.toolhead
         self.infeed = dispatcher.infeed
-        self.pipette_handler = dispatcher.pippete_handler
+        self.pipette_handler = dispatcher.pipette_handler
         self.spin_coater = dispatcher.spin_coater
         self.camera = dispatcher.camera
         self.gripper = dispatcher.gripper
@@ -142,7 +142,7 @@ class MoveRegistry():
     def home(self):
         """ Reset the machine"""
         self.toolhead.home()
-        self.pippete_handler.home()
+        self.pipette_handler.home()
         self.vial_carousel.home()
         
         self.tip_matrix.refill_tips()
@@ -299,7 +299,7 @@ class MoveRegistry():
         
     # -------- PIPPETE MOVES --------
     def set_actuator(self, position: float):
-        self.pippete_handler.set_actuator_position(position)
+        self.pipette_handler.set_actuator_position(position)
     
     def replace_tip(self):
         # raise machine to avoid collisions
@@ -326,8 +326,8 @@ class MoveRegistry():
         self.move_to_location("vial carousel")
         self.vial_carousel.set_vial(vial_num)
         self.toolhead.move_axis("Z", vial_draw_height)
-        self.pippete_handler.dispense_all(3)
-        self.pippete_handler.draw_ul(volume_ul)
+        self.pipette_handler.dispense_all(3)
+        self.pipette_handler.draw_ul(volume_ul)
         self.toolhead.move_axis("Z", 200)
                 
     def mix_fluid(self, source_vial_1: int, amount_1: int, source_vial_2: int, amount_2: int, destination_vial: int):
@@ -341,46 +341,46 @@ class MoveRegistry():
         
         # draw from first vial
         self.vial_carousel.set_vial(source_vial_1)
-        self.pippete_handler.dispense_all(3) 
+        self.pipette_handler.dispense_all(3) 
         self.toolhead.move_axis("Z", vial_draw_height)
-        self.pippete_handler.draw_ul(amount_1)
+        self.pipette_handler.draw_ul(amount_1)
         self.toolhead.move_axis("Z", 200)
         
         # dispense fluid 1 into destination
         self.vial_carousel.set_vial(destination_vial)
         self.toolhead.move_axis("Z", vial_draw_height)
-        self.pippete_handler.dispense_all(1)
+        self.pipette_handler.dispense_all(1)
         self.toolhead.move_axis("Z", 200)
         
         # draw from first vial
         self.vial_carousel.set_vial(source_vial_2)
-        self.pippete_handler.dispense_all(3) 
+        self.pipette_handler.dispense_all(3) 
         self.toolhead.move_axis("Z", vial_draw_height)
-        self.pippete_handler.draw_ul(amount_2)
+        self.pipette_handler.draw_ul(amount_2)
         self.toolhead.move_axis("Z", 200)
         
         # dispense fluid 1 into destination
         self.vial_carousel.set_vial(destination_vial)
         self.toolhead.move_axis("Z", vial_draw_height)
-        self.pippete_handler.dispense_all(1)
+        self.pipette_handler.dispense_all(1)
         
         # mix fluids together
         for i in range(5):
-            self.pippete_handler.draw_ul(10)
-            self.pippete_handler.dispense_all(1)
+            self.pipette_handler.draw_ul(10)
+            self.pipette_handler.dispense_all(1)
         
         self.toolhead.move_axis("Z", 200)
         
     def dispense(self, duration_s: int):
         """ Dispense all fluid in pippete, assuming there is any"""
         # calculate feedrate
-        self.pippete_handler.dispense_all(duration_s)
+        self.pipette_handler.dispense_all(duration_s)
         
     def set_grab_angle(self, angle: int):
-        self.pippete_handler.set_grabber_angle(angle)
+        self.pipette_handler.set_grabber_angle(angle)
     
     def put_away_pipette(self):
-        current_pipette = self.pippete_handler.get_pippete_index()
+        current_pipette = self.pipette_handler.get_pippete_index()
         
         if not current_pipette:
             self.logger.debug("No pipette held, returning")
@@ -388,58 +388,58 @@ class MoveRegistry():
         
         self.move_to_location("pipette stand")
         if current_pipette == 0:
-            self.toolhead.move_axis("Y", self.pippete_handler.STAND_0_Y)
+            self.toolhead.move_axis("Y", self.pipette_handler.STAND_0_Y)
         else:
-            self.toolhead.move_axis("Y", self.pippete_handler.STAND_1_Y)
+            self.toolhead.move_axis("Y", self.pipette_handler.STAND_1_Y)
             
         self.toolhead.move_axis("Z", 40, relative=True) # raise
         self.toolhead.move_axis("X", 120, relative=True) #move forward
         self.toolhead.move_axis("Z", -40, relative=True) #lower into stand
-        self.pippete_handler.open_grabber()
+        self.pipette_handler.open_grabber()
         self.toolhead.move_axis("X", -120, relative=True) #move backwards
         
-        self.pippete_handler.set_pipette()
+        self.pipette_handler.set_pipette()
         
     
     
     
     def set_0(self):
-        self.pippete_handler.set_actuator_position(97)
-        self.pippete_handler.set_pipette(0)
+        self.pipette_handler.set_actuator_position(97)
+        self.pipette_handler.set_pipette(0)
         self.toolhead.move_axis("Z", 200)
         self.move_to_location("pipette stand")
-        self.pippete_handler.set_grabber_angle(145)
+        self.pipette_handler.set_grabber_angle(145)
         self.toolhead.move_axis("X", 120, relative=True) #move forward
-        self.pippete_handler.set_grabber_angle(48)
+        self.pipette_handler.set_grabber_angle(48)
         self.toolhead.move_axis("Z", 40, relative=True) # raise
         self.toolhead.move_axis("X", -120, relative=True) #move backwards
         
     def set_1(self):
-        self.pippete_handler.set_actuator_position(97)
-        self.pippete_handler.set_pipette(1)
+        self.pipette_handler.set_actuator_position(97)
+        self.pipette_handler.set_pipette(1)
         
         self.move_to_location("pipette stand")
         self.toolhead.move_axis("Z", 200)
         self.toolhead.move_axis("Y", 151)
         self.toolhead.move_axis("Z", 128)
-        self.pippete_handler.set_grabber_angle(145)
+        self.pipette_handler.set_grabber_angle(145)
         self.toolhead.move_axis("X", 120, relative=True) #move forward
-        self.pippete_handler.set_grabber_angle(48)
+        self.pipette_handler.set_grabber_angle(48)
         self.toolhead.move_axis("Z", 40, relative=True) # raise
         self.toolhead.move_axis("X", -120, relative=True) #move backwards
         
     def put_0(self):
-        self.pippete_handler.set_actuator_position(97)
+        self.pipette_handler.set_actuator_position(97)
         self.toolhead.move_axis("Z", 200)
         self.move_to_location("pipette stand")
         self.toolhead.move_axis("Z", 40, relative=True) # raise
         self.toolhead.move_axis("X", 120, relative=True) #move forward
         self.toolhead.move_axis("Z", -40, relative=True) # raise
-        self.pippete_handler.set_grabber_angle(145)
+        self.pipette_handler.set_grabber_angle(145)
         self.toolhead.move_axis("X", -120, relative=True) #move backwards
     
     def put_1(self):
-        self.pippete_handler.set_actuator_position(97)
+        self.pipette_handler.set_actuator_position(97)
         self.toolhead.move_axis("Z", 200)
         self.move_to_location("pipette stand")
         self.toolhead.move_axis("Z", 200)
@@ -448,13 +448,13 @@ class MoveRegistry():
         self.toolhead.move_axis("Z", 168)
         self.toolhead.move_axis("X", 120, relative=True) #move forward
         self.toolhead.move_axis("Z", -40, relative=True) # raise
-        self.pippete_handler.set_grabber_angle(145)
+        self.pipette_handler.set_grabber_angle(145)
         self.toolhead.move_axis("X", -120, relative=True) #move backwards
     
     def set_pipette(self, target_pipette: int):
         # rasie toolhead to avoid collisions
 
-        current_pipette = self.pippete_handler.get_pippete_index()
+        current_pipette = self.pipette_handler.get_pippete_index()
         self.toolhead.move_axis("Z", 200)
         
         #self.move_to_location("pipette pickup")
@@ -467,34 +467,34 @@ class MoveRegistry():
         # if we have a pipette and its not the one we want, put it away
         if current_pipette and current_pipette != target_pipette:
             if current_pipette == 0:
-                self.toolhead.move_axis("Y", self.pippete_handler.STAND_0_Y)
+                self.toolhead.move_axis("Y", self.pipette_handler.STAND_0_Y)
             else:
-                self.toolhead.move_axis("Y", self.pippete_handler.STAND_1_Y)
+                self.toolhead.move_axis("Y", self.pipette_handler.STAND_1_Y)
             
             self.toolhead.move_axis("Z", 40, relative=True) # raise
             self.toolhead.move_axis("X", 120, relative=True) #move forward
             self.toolhead.move_axis("Z", -40, relative=True) #lower into stand
-            self.pippete_handler.open_grabber()
+            self.pipette_handler.open_grabber()
             self.toolhead.move_axis("X", -120, relative=True) #move backwards
         
         if current_pipette == 0:
-            self.toolhead.move_axis("Y", self.pippete_handler.STAND_0_Y)
+            self.toolhead.move_axis("Y", self.pipette_handler.STAND_0_Y)
         else:
-            self.toolhead.move_axis("Y", self.pippete_handler.STAND_1_Y)
+            self.toolhead.move_axis("Y", self.pipette_handler.STAND_1_Y)
             
-        self.pippete_handler.open_grabber()
+        self.pipette_handler.open_grabber()
         self.toolhead.move_axis("X", 120, relative=True) #move forward
-        self.pippete_handler.close_grabber()
+        self.pipette_handler.close_grabber()
         self.toolhead.move_axis("Z", 40, relative=True) # raise
         self.toolhead.move_axis("X", -120, relative=True) #move backwards
         
-        self.pippete_handler.set_pipette(target_pipette)
+        self.pipette_handler.set_pipette(target_pipette)
         
     def eject_tip(self):
-        self.pippete_handler.eject_tip()
+        self.pipette_handler.eject_tip()
         
     def set_eject_angle(self, angle: int):
-        self.pippete_handler.set_eject_angle(angle)
+        self.pipette_handler.set_eject_angle(angle)
 
     # -------- SPECTROMETER MOVES --------
 
