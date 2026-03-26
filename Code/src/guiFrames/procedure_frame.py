@@ -2,7 +2,7 @@ from logging import Logger
 import logging
 from sre_parse import State
 import customtkinter as ctk
-from procedure_handler import ProcedureHandler
+from Code.src.services.procedure_handler import ProcedureHandler
 from tkinter import filedialog
 
 import sys

@@ -3,7 +3,7 @@ import queue
 import logging
 import time
 from datetime import datetime, timedelta
-from moves import Dispatcher
+from services.move_registry import MoveRegistry
 # pylint: disable=line-too-long
 
 
@@ -11,11 +11,11 @@ class ProcedureHandler(threading.Thread):
     """This class controls the main procedure thread, which calls functions .
     """
 
-    def __init__(self, dispatcher: Dispatcher):
+    def __init__(self, move_registry):
         super().__init__(name="ProcedureHandler",daemon=True)
         
         self.logger = logging.getLogger("Main Logger")
-        self.dispatcher = dispatcher
+        self.move_registry = move_registry
 
         self.procedure = None
         self.current_step = 0
@@ -35,7 +35,7 @@ class ProcedureHandler(threading.Thread):
             self.logger.error("Cannot change moves until procedure stops")
             return
         
-        if not self.dispatcher.validate_moves(procedure):
+        if not self.move_registry.validate_moves(procedure):
             self.logger.error("Invalid moves in procedure")
             return
          
@@ -64,7 +64,7 @@ class ProcedureHandler(threading.Thread):
 
                 # try running the move, stopping if there are any errors
                 try:
-                    self.dispatcher.move_dict[func_name](*func_args)
+                    self.move_registry.move_dict[func_name](*func_args)
                 except Exception as e:
                     self.logger.error(f"Error while running procedure: {e}")
                     break
@@ -106,7 +106,7 @@ class ProcedureHandler(threading.Thread):
         
             
     def kill(self):
-        self.dispatcher.kill()
+        self.move_registry.kill()
         self.logger.error("Machine shut down. Reboot required")
 
     def pause(self):

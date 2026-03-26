@@ -17,27 +17,25 @@ from drivers.camera_driver import Camera
 from drivers.spincoater_driver import SpinCoater
 from drivers.spectrometer_driver import Spectrometer
 from drivers.procedure_file_driver import ProcedureFile
-from image_processing import ImageProcessor
+from services.image_processing import ImageProcessor
 
-class Dispatcher():
+class MoveRegistry():
     
 
-    def __init__(self, spin_coater: SpinCoater, hotplate: Hotplate, 
-                 camera: Camera, gripper: Gripper, infeed: Infeed, pippete_handler: PipetteHandler,
-                 toolhead: Toolhead, vial_carousel: VialCarousel, spectrometer: Spectrometer, tip_matrix: TipMatrix, spectrometer_frame=None):
+    def __init__(self, dispatcher):
         self.logger = logging.getLogger("Main Logger")
         
-        self.toolhead = toolhead
-        self.infeed = infeed
-        self.pippete_handler = pippete_handler
-        self.spin_coater = spin_coater
-        self.camera = camera
-        self.gripper = gripper
-        self.hotplate = hotplate
-        self.vial_carousel = vial_carousel
-        self.spectrometer = spectrometer
-        self.spectrometer_frame = spectrometer_frame
-        self.tip_matrix = tip_matrix
+        self.toolhead = dispatcher.toolhead
+        self.infeed = dispatcher.infeed
+        self.pippete_handler = dispatcher.pippete_handler
+        self.spin_coater = dispatcher.spin_coater
+        self.camera = dispatcher.camera
+        self.gripper = dispatcher.gripper
+        self.hotplate = dispatcher.hotplate
+        self.vial_carousel = dispatcher.vial_carousel
+        self.spectrometer = dispatcher.spectrometer
+        self.spectrometer_frame = dispatcher.spectrometer_frame
+        self.tip_matrix = dispatcher.tip_matrix
         self.slide_matrix = SlideMatrix()
         
         ImageProcessor.set_detector()
@@ -96,7 +94,8 @@ class Dispatcher():
         self.vial = 0
         
     def validate_moves(self, moves: list) -> bool:
-        """Validates a list of moves by checking if the move exists in the dispatcher.
+        """Validates a list of moves by checking if the move exists in the MoveRegistry
+    .
         Also checks if the number of args is correct
         ### Args:
             moves (list):
@@ -114,7 +113,7 @@ class Dispatcher():
             func_args = move[1:]
 
             if func_name not in self.move_dict:
-                self.logger.error(f"Function #{index},{func_name} not found in dispatcher")
+                self.logger.error(f"Function #{index},{func_name} not found in MoveRegistry")
                 valid = False
             
             func = self.move_dict[func_name]

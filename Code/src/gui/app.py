@@ -8,10 +8,12 @@ ctk.set_default_color_theme("green")
 
 class App(ctk.CTk):
     """Application for Perovskite Automated Synthesis System"""
-    def __init__(self, dispatcher):
+    def __init__(self, move_registry, dispatcher):
         super().__init__(fg_color = FOREGROUND_COLOR)
 
+        self.move_registry = move_registry
         self.dispatcher = dispatcher
+        
         # # If run from main, takes the file path 
         # self.current_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # self.cat_icon_path = os.path.join(self.current_directory, "gui", "icons", "cat.ico")
@@ -30,7 +32,7 @@ class App(ctk.CTk):
         self.tab_manager_frame = TabManagerFrame(master = self, controller = self)
         self.tab_manager_frame.grid(row = 0, column = 0, rowspan = 2, padx = 0, pady = 0, sticky = "nsew")
         
-        self.tab_view_frame = TabViewFrame(master = self, controller = self, dispatcher = self.dispatcher)
+        self.tab_view_frame = TabViewFrame(master = self, controller = self, move_registry = self.move_registry)
         self.tab_view_frame.grid(row = 0, column = 1, padx = 0, pady = 0, sticky = "nsew")
 
         self.info_frame = InfoFrame(master = self, controller = self)

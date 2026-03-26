@@ -22,6 +22,7 @@ from objects.gripper import Gripper
 from objects.pippete import Pipette, PipetteHandler
 from objects.toolhead import Toolhead
 
+from core.dispatcher import Dispatcher
 # -- GUI IMPORT --
 # from guiFrames.console_frame import ConsoleFrame
 # from guiFrames.procedure_frame import ProcedureFrame
@@ -33,8 +34,8 @@ from objects.toolhead import Toolhead
 # from guiFrames.locations_frame import LocationFrame
 # from guiFrames.ml_model_frame import MLModelFrame
 
-from procedure_handler import ProcedureHandler
-from moves import Dispatcher
+from services.procedure_handler import ProcedureHandler
+from services.move_registry import MoveRegistry
 from gui import App
 
 if __name__ == "__main__":
@@ -47,72 +48,27 @@ if __name__ == "__main__":
     # console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     # logger.addHandler(console_handler)
     # logger.setLevel(logging.DEBUG)
-    
-    # -- CONTROL BOARD --
-    control_board = ControlBoard()
-    
-    # -- TOOLHEAD --
-    toolhead = Toolhead(control_board=control_board)
-    
-    # -- SPIN COATER --
-    spin_coater= SpinCoater()
-
-    # # -- CAMERA --
-    camera = Camera()
-
-    # -- GRIPPER --
-    arm_servo = AngularServo(pin=17, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    arm_servo.angle = 20
-    finger_servo = AngularServo(pin=18, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    finger_servo.angle=40
-    gripper = Gripper(arm_servo=arm_servo, finger_servo=finger_servo)
-    
-    # -- PIPETTE HANDLER --
-    tip_eject_servo = AngularServo(pin=27, min_angle=0, max_angle=270, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    grabber_servo = AngularServo(pin=22, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    grabber_servo.angle = 180
-    pipettes = [Pipette(200, 97, 17, 3, False),
-                Pipette(1000, 97, 17, 3, True)]
-    pipette_handler = PipetteHandler(control_board=control_board,
-                                     tip_eject_servo=tip_eject_servo, grabber_servo=grabber_servo,
-                                     pipettes=pipettes)
-    
-    # -- HOTPLATE --
-    hotplate = Hotplate()
-    # -- SPECTROMETER + INFEED --
-    spectrometer = Spectrometer()
-    
-    
-    # -- TIP MATRIX --
-    tip_matrix = TipMatrix()
-  
-    infeed_servo = AngularServo(pin=24, min_angle=0, max_angle=180,min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
-    infeed = Infeed(infeed_servo)
-    
-    # -- VIAL CAROUSEL --
-    vial_carousel = VialCarousel(control_board)
-
  
+    dispatcher = Dispatcher()
+
+    move_registry = MoveRegistry(dispatcher)
     
-    dispatcher = Dispatcher(
-        toolhead=toolhead,
-        spin_coater=spin_coater,
-        hotplate=hotplate,
-        camera=camera,
-        gripper=gripper,
-        infeed=infeed,
-        spectrometer=spectrometer,
-        vial_carousel=vial_carousel,
-        pippete_handler=pipette_handler,
-        spectrometer_frame= None, 
-        tip_matrix=tip_matrix
-    )
-    
-    procedure_handler = ProcedureHandler(dispatcher=dispatcher)
+    procedure_handler = ProcedureHandler(move_registry = move_registry)
     
     # -- GUI --
-    app = App(dispatcher)
-    dispatcher.spectrometer_frame = app.spectrometer_frame
+    app = App(move_registry)
+    
+    move_registry.spectrometer_frame = app.spectrometer_frame
+
+        # # # creating frames
+    # # procedure_frame = ProcedureFrame(app, procedure_handler)
+    # # console_frame = ConsoleFrame(app)
+    # # connection_frame = ConnectionFrame(app, control_board,spin_coater,hotplate,camera,spectrometer)
+    # # camera_frame = CameraFrame(app, camera)
+    # # info_frame = InfoFrame(app, control_board, hotplate, pipette_handler, vial_carousel)
+    # # procedure_builder_frame = ProcedureBuilderFrame(app, dispatcher.move_dict, procedure_handler)
+    # # location_frame = LocationFrame(master=app)
+    # # # ml_model_frame = MLModelFrame(app, width=370)
 
     # # program stalls when not everything is connected and this is called
     # # # connect to devices
@@ -137,15 +93,7 @@ if __name__ == "__main__":
     # # icon = PhotoImage(file="guiImages/logo.png")
     # # app.wm_iconphoto(True, icon)
 
-    # # # creating frames
-    # # procedure_frame = ProcedureFrame(app, procedure_handler)
-    # # console_frame = ConsoleFrame(app)
-    # # connection_frame = ConnectionFrame(app, control_board,spin_coater,hotplate,camera,spectrometer)
-    # # camera_frame = CameraFrame(app, camera)
-    # # info_frame = InfoFrame(app, control_board, hotplate, pipette_handler, vial_carousel)
-    # # procedure_builder_frame = ProcedureBuilderFrame(app, dispatcher.move_dict, procedure_handler)
-    # # location_frame = LocationFrame(master=app)
-    # # # ml_model_frame = MLModelFrame(app, width=370)
+
     
     # # # putting the frames on the gui
     # # procedure_frame.grid(row=0, column=0, padx=5, pady=5,sticky="nsew")
