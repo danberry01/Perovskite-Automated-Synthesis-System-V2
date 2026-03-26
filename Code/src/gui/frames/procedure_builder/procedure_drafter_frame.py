@@ -11,7 +11,7 @@ PROCEDURE_STEPS = [
 ]
 
 class ProcedureDrafterFrame(ctk.CTkFrame):
-    def __init__(self, master, dispatcher, procedure_handler, save_callback = None, logger = None **kwargs):
+    def __init__(self, master, dispatcher, procedure_handler, save_callback = None, logger = None, **kwargs):
         super().__init__(master, fg_color=FOREGROUND_COLOR, **kwargs)
 
         self.dispatcher = dispatcher
