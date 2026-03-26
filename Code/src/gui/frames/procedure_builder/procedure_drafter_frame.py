@@ -106,6 +106,17 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         )
         self.save_button.grid(row=4, column=1, padx=10, pady=5, sticky="new")
 
+        self.save_button = ctk.CTkButton(
+            self,
+            height=60,
+            corner_radius=0,
+            text="Quick Run",
+            text_color=BACKGROUND_COLOR,
+            fg_color=PLAIN_TEXT_COLOR,
+            command=self.quick_run
+        )
+        self.save_button.grid(row=5, column=1, padx=10, pady=5, sticky="new")
+
     def add_step(self):
         self.save_state()
         step_name = self.dropdown.get()
@@ -133,7 +144,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
 
         self.refresh_steps()
 
-    def _quick_run(self):
+    def quick_run(self):
         """Quickly run the procedure without exporting."""
         if not self.procedure_handler:
             raise RuntimeError("Procedure handler not initialized")
