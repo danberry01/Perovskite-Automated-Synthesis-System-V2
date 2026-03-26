@@ -11,17 +11,20 @@ PROCEDURE_STEPS = [
 ]
 
 class ProcedureDrafterFrame(ctk.CTkFrame):
-    def __init__(self, master, move_registry, save_callback = None, **kwargs):
+    def __init__(self, master, dispatcher, procedure_handler, save_callback = None, logger = None **kwargs):
         super().__init__(master, fg_color=FOREGROUND_COLOR, **kwargs)
 
-        self.move_registry = move_registry
+        self.dispatcher = dispatcher
+        self.procedure_handler = procedure_handler
 
-        self.move_registry_moves_truncated = [self.truncate_text(s) for s in move_registry.move_dict.keys()]
+        self.dispatcher_moves_truncated = [self.truncate_text(s) for s in dispatcher.move_dict.keys()]
 
         self.save_callback = save_callback
         self.steps = []
         self.step_widgets = []
-        self.current_file = "No file loaded"  # NEW
+        self.current_file = "No file loaded"
+
+        self.logger = logger  # NEW
 
         self.undo_stack = []
         self.redo_stack = []
@@ -60,13 +63,13 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             height=60,
             width = 300,
             corner_radius=0,
-            values=self.move_registry_moves_truncated,
+            values=self.dispatcher_moves_truncated,
             text_color=BACKGROUND_COLOR,
             fg_color=PLAIN_TEXT_COLOR,
             button_color=PLAIN_TEXT_COLOR,
             button_hover_color=FOREGROUND_COLOR_TWO
         )
-        self.dropdown.set(self.move_registry_moves_truncated[0])
+        self.dropdown.set(self.dispatcher_moves_truncated[0])
         self.dropdown.grid(row=1, column=1, padx=10, pady=5, sticky="new")
 
         self.add_button = ctk.CTkButton(
@@ -129,6 +132,18 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             self.selected_index = len(self.steps) - 1
 
         self.refresh_steps()
+
+    def _quick_run(self):
+        """Quickly run the procedure without exporting."""
+        if not self.procedure_handler:
+            raise RuntimeError("Procedure handler not initialized")
+        procedure = self._get_procedure()
+        self.procedure_handler.set_procedure(procedure["Procedure"])
+        self.procedure_handler.begin()
+        if self.logger:
+            self.logger.info("Quick Run started!")
+        else:
+            print("Quick Run started!")
 
     def move_step(self, old_index, new_index):
         if new_index < 0 or new_index >= len(self.steps):
