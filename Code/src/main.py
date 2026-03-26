@@ -92,7 +92,7 @@ if __name__ == "__main__":
     # -- VIAL CAROUSEL --
     vial_carousel = VialCarousel(control_board)
 
-    # -- GUI --
+ 
     
     dispatcher = Dispatcher(
         toolhead=toolhead,
@@ -104,12 +104,13 @@ if __name__ == "__main__":
         spectrometer=spectrometer,
         vial_carousel=vial_carousel,
         pippete_handler=pipette_handler,
-        spectromeer_frame=spectrometer_frame, 
+        spectromeer_frame= None, 
         tip_matrix=tip_matrix
     )
     
     procedure_handler = ProcedureHandler(dispatcher=dispatcher)
     
+    # -- GUI --
     app = App(dispatcher)
 
     # # program stalls when not everything is connected and this is called
