@@ -58,7 +58,7 @@ if __name__ == "__main__":
     # -- GUI --
     app = App(move_registry, dispatcher)
     
-    move_registry.spectrometer_frame = app.spectrometer_frame
+    move_registry.spectrometer_frame = app.tab_view_frame.procedure_viewer_frame.spectrometer_frame
 
         # # # creating frames
     # # procedure_frame = ProcedureFrame(app, procedure_handler)
