@@ -8,7 +8,7 @@ pp=os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
 sys.path.append(pp)
 from drivers.procedure_file_driver import ProcedureFile
 
-class LocationFrame(ctk.CTkScrollableFrame):
+class LocationsFrame(ctk.CTkScrollableFrame):
     def __init__(self, master):
         super().__init__(master=master, width=300,corner_radius=0 )
         self.location_entries = []
