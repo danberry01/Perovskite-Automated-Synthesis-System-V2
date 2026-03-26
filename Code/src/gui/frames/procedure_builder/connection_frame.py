@@ -87,7 +87,7 @@ class ConnectionFrame(ctk.CTkFrame):
             width=120,
             fg_color = PLAIN_TEXT_COLOR,
             button_color = PLAIN_TEXT_COLOR,
-            hover_color = FOREGROUND_COLOR_TWO,
+            button_hover_color = FOREGROUND_COLOR_TWO,
             corner_radius = 0,
             command=self._set_command_destination
         )
