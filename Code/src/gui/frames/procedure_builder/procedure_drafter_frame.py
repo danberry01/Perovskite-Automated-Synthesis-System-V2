@@ -11,13 +11,13 @@ PROCEDURE_STEPS = [
 ]
 
 class ProcedureDrafterFrame(ctk.CTkFrame):
-    def __init__(self, master, dispatcher, procedure_handler, save_callback = None, logger = None, **kwargs):
-        super().__init__(master, fg_color=FOREGROUND_COLOR, **kwargs)
+    def __init__(self, master, move_registry, procedure_handler, save_callback = None, logger = None, **kwargs):
+        super().__init__(master, fg_color = FOREGROUND_COLOR, **kwargs)
 
-        self.dispatcher = dispatcher
+        self.move_registry = move_registry
         self.procedure_handler = procedure_handler
 
-        self.dispatcher_moves_truncated = [self.truncate_text(s) for s in dispatcher.move_dict.keys()]
+        self.move_registry_moves_truncated = [self.truncate_text(s) for s in move_registry.move_dict.keys()]
 
         self.save_callback = save_callback
         self.steps = []
@@ -63,13 +63,13 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             height=60,
             width = 300,
             corner_radius=0,
-            values=self.dispatcher_moves_truncated,
+            values=self.move_registry_moves_truncated,
             text_color=BACKGROUND_COLOR,
             fg_color=PLAIN_TEXT_COLOR,
             button_color=PLAIN_TEXT_COLOR,
             button_hover_color=FOREGROUND_COLOR_TWO
         )
-        self.dropdown.set(self.dispatcher_moves_truncated[0])
+        self.dropdown.set(self.move_registry_moves_truncated[0])
         self.dropdown.grid(row=1, column=1, padx=10, pady=5, sticky="new")
 
         self.add_button = ctk.CTkButton(

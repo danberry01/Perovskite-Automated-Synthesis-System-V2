@@ -24,7 +24,6 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
         # CustomTKinter Frames
         self.procedure_drafter_frame = ProcedureDrafterFrame(
             master = self, 
-            dispatcher = self.dispatcher,
             move_registry = self.move_registry,
             procedure_handler = self.procedure_handler
         )
