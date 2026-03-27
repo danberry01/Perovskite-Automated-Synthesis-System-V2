@@ -2,7 +2,7 @@
 import customtkinter as ctk
 from ...components.constants import *
 from .camera_frame import CameraFrame
-from .spectrometer_frame import SpectrometerFrame
+# from .spectrometer_frame import SpectrometerFrame
 from .procedure_queue_frame import ProcedureQueueFrame
 from .console_frame import ConsoleFrame
 
