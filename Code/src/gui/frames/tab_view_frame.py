@@ -33,7 +33,10 @@ class TabViewFrame(ctk.CTkFrame):
         self.procedure_builder_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
         self.procedure_builder_frame.grid_remove()
 
-        self.procedure_viewer_frame = ProcedureViewerFrame(master = self)
+        self.procedure_viewer_frame = ProcedureViewerFrame(
+            master = self,
+            procedure_handler = self.procedure_handler
+            )
         self.procedure_viewer_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
         self.procedure_viewer_frame.grid_remove()
 
