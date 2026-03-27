@@ -52,7 +52,7 @@ class ConsoleFrame(ctk.CTkFrame):
             corner_radius=0,
             fg_color = PLAIN_TEXT_COLOR,
             state="disabled")
-        self.console.grid(row=1, column=0, columnspan = 2, padx=20, pady=10, columnspan=2, sticky="nsew")
+        self.console.grid(row=1, column=0, columnspan = 2, padx=20, pady=10, sticky="nsew")
         
         self.console.tag_config("DEBUG", foreground="#8df564")
         self.console.tag_config("WARNING", foreground="#e4f089")
