@@ -51,7 +51,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.drag_frame = ctk.CTkScrollableFrame(self, fg_color="#1f1f1f", corner_radius=0)
         self.drag_frame.grid(row=0, column=0, rowspan=7, sticky="nsew", padx=10, pady=10)
 
-        # NEW: Current file label
+        # Current file label
         self.file_label = ctk.CTkLabel(
             self,
             text=f"Editing: {self.current_file}",
@@ -182,7 +182,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         total_positions = len(self.steps) + 1  # one gap above each step + one at bottom
         for pos in range(total_positions):
             # Create gap frame
-            gap = ctk.CTkFrame(self.drag_frame, height=4, fg_color=BACKGROUND_COLOR)
+            gap = ctk.CTkFrame(self.drag_frame, height=8, fg_color=BACKGROUND_COLOR)
             gap.pack(fill="x", padx=5, pady=2)
             gap.bind("<Button-1>", lambda e, idx=pos: self.select_gap(idx))
             self.gap_widgets.append(gap)
