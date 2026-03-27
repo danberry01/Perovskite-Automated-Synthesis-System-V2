@@ -2,18 +2,25 @@ import customtkinter as ctk
 import logging
 from queue import Queue
 
+from ...components.constants import *
+
 
 class ConsoleFrame(ctk.CTkFrame):
     """ GUI Frame to display the console log """
     
     def __init__(self, master):
-        super().__init__(master=master,border_color="#1f6aa5",border_width=2, height=200, corner_radius=0 )
+        super().__init__(master=master,fg_color = FOREGROUND_COLOR,border_width=2, height=200, corner_radius=0 )
         
         self.logger = logging.getLogger("Main Logger")
         self.log_queue = Queue()
         self.console_handler = ConsoleLogHandler(self)
         self.console_handler.setFormatter(logging.Formatter('%(levelname)s\t%(asctime)s: %(message)s'))
         self.logger.addHandler(self.console_handler)
+
+        self.columnconfigure(0, weight = 1)
+        self.columnconfigure(1, weight = 1)
+        self.rowconfigure(0, weight = 0)
+        self.rowconfigure(1, weight = 1)
 
         # title label
         self.title_label = ctk.CTkLabel(
@@ -32,17 +39,20 @@ class ConsoleFrame(ctk.CTkFrame):
             master=self,
             values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             width=100,
+            fg_color = PLAIN_TEXT_COLOR,
+            button_color = PLAIN_TEXT_COLOR,
+            button_hover_color = FOREGROUND_COLOR_TWO,
+            corner_radius = 0,
             command=self.update_logging_level)
         self.log_level.grid(row=0, column=1, padx=20, pady=10, sticky="ne")
         
         # console
         self.console = ctk.CTkTextbox(
             master=self,
-            width=400,
-            height=200,
             corner_radius=0,
-            state="disabled")
-        self.console.grid(row=1, column=0, padx=20, pady=10, columnspan=2, sticky="nsew")
+            fg_color = PLAIN_TEXT_COLOR,
+            state="disabled")s
+        self.console.grid(row=1, column=0, columnspan = 2, padx=20, pady=10, columnspan=2, sticky="nsew")
         
         self.console.tag_config("DEBUG", foreground="#8df564")
         self.console.tag_config("WARNING", foreground="#e4f089")
