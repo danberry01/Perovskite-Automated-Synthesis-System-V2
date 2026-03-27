@@ -29,7 +29,7 @@ class ProcedureViewerFrame(ctk.CTkFrame):
         self.console_frame.grid(row = 1, column = 1, padx = 10, pady = 10, sticky = "nsew")
         
         self.spectrometer_frame = SpectrometerFrame(master = self)
-        self.spectrometer_frame.grid(row = 1, column = 1, padx = 10, pady = 10, sticky = "nsew")
+        self.spectrometer_frame.grid(row = 1, column = 0, padx = 10, pady = 10, sticky = "nsew")
 
 
 
