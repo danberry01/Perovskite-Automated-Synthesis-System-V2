@@ -18,7 +18,7 @@ class StepStateFrame(ctk.CTkFrame):
     """Visual representation of a single procedure step"""
 
     def __init__(self, master, text):
-        super().__init__(master, corner_radius=6, height=42)
+        super().__init__(master, corner_radius=0, height=60)
 
         self.label = ctk.CTkLabel(self, text=text, anchor="w")
         self.label.pack(fill="both", expand=True, padx=10)
@@ -30,16 +30,16 @@ class StepStateFrame(ctk.CTkFrame):
 
     def set_state(self, state):
         if state == "idle":
-            self.configure(fg_color="#808080")  # gray
+            self.configure(fg_color=FOREGROUND_COLOR)  # gray
 
         elif state == "running":
-            self.configure(fg_color="#1f6aa5")  # blue
+            self.configure(fg_color="#309df0")  # blue
 
         elif state == "complete":
-            self.configure(fg_color="#2e7d32")  # green
+            self.configure(fg_color="#3ee646")  # green
 
         elif state == "error":
-            self.configure(fg_color="#a10e22")  # red
+            self.configure(fg_color="#e82c45")  # red
 
 
 class ProcedureQueueFrame(ctk.CTkFrame):

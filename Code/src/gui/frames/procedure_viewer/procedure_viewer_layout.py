@@ -25,7 +25,7 @@ class ProcedureViewerFrame(ctk.CTkFrame):
             master = self,
             procedure_handler = self.procedure_handler
         )
-        self.procedure_queue_frame.grid(row = 0, column = 0, rowspan = 3, padx = 10, pady = 10, sticky = "nsew")
+        self.procedure_queue_frame.grid(row = 0, column = 0, rowspan = 2, padx = 10, pady = 10, sticky = "nsew")
         
         self.camera_frame = CameraFrame(master = self)
         self.camera_frame.grid(row = 0, column = 1, padx = 10, pady = 10, sticky = "nsew")
