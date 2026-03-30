@@ -42,7 +42,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.master.bind("<Control-z>", self.undo)
         self.master.bind("<Control-Shift-Z>", self.redo)
 
-        self.grid_rowconfigure(6, weight=1)
+        self.grid_rowconfigure(8, weight=1)
         self.grid_columnconfigure(0, weight=4)
         self.grid_columnconfigure(1, weight=0)
 
@@ -93,6 +93,17 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         )
         self.remove_button.grid(row=3, column=1, padx=10, pady=5, sticky="new")
 
+        self.new_button = ctk.CTkButton(
+            self,
+            height=60,
+            corner_radius=0,
+            text="New Procedure",
+            text_color=BACKGROUND_COLOR,
+            fg_color=PLAIN_TEXT_COLOR,
+            command=self.new_procedure
+        )
+        self.new_button.grid(row=4, column=1, padx=10, pady=5, sticky="new")
+
         self.load_button = ctk.CTkButton(
             self,
             height=60,
@@ -102,7 +113,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             fg_color=PLAIN_TEXT_COLOR,
             command=self.load_procedure
         )
-        self.load_button.grid(row=4, column=1, padx=10, pady=5, sticky="new")
+        self.load_button.grid(row=5, column=1, padx=10, pady=5, sticky="new")
 
         self.save_button = ctk.CTkButton(
             self,
@@ -113,7 +124,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             fg_color=PLAIN_TEXT_COLOR,
             command=self.save_procedure
         )
-        self.save_button.grid(row=5, column=1, padx=10, pady=5, sticky="new")
+        self.save_button.grid(row=6, column=1, padx=10, pady=5, sticky="new")
 
         self.quick_run_button = ctk.CTkButton(
             self,
@@ -124,7 +135,16 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             fg_color=PLAIN_TEXT_COLOR,
             command=self.quick_run
         )
-        self.quick_run_button.grid(row=6, column=1, padx=10, pady=5, sticky="new")
+        self.quick_run_button.grid(row=7, column=1, padx=10, pady=5, sticky="new")
+
+    def new_procedure(self):
+        """Clear all steps and start a new procedure"""
+        self.save_state()
+        self.steps = []
+        self.current_file = "No file loaded"
+        self.file_label.configure(text=f"Editing: {self.current_file}")
+        self.refresh_steps()
+        logging.getLogger("Main Logger").info("New procedure started")
 
     def _selected_move_full_name(self):
         """Map the selected truncated dropdown text back to the real move name."""
