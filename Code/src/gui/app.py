@@ -30,7 +30,10 @@ class App(ctk.CTk):
         self.grid_columnconfigure(0, weight = 0)
         self.grid_columnconfigure(1, weight = 1)
 
-        self.tab_manager_frame = TabManagerFrame(master = self, controller = self)
+        self.tab_manager_frame = TabManagerFrame(
+            master = self,
+            controller = self
+        )
         self.tab_manager_frame.grid(row = 0, column = 0, rowspan = 2, padx = 0, pady = 0, sticky = "nsew")
         
         self.tab_view_frame = TabViewFrame(
@@ -42,7 +45,10 @@ class App(ctk.CTk):
         )
         self.tab_view_frame.grid(row = 0, column = 1, padx = 0, pady = 0, sticky = "nsew")
 
-        self.info_frame = InfoFrame(master = self, controller = self)
+        self.info_frame = InfoFrame(
+            master = self,
+            controller = self
+        )
         self.info_frame.grid(row = 1, column = 1, padx = 0, pady = 0, sticky = "nsew")
 
     def switch_tab(self, tab_name):
