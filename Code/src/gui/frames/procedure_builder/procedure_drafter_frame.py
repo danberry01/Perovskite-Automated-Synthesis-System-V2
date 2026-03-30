@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from inspect import signature
+
 from ...components.constants import *
 from .step_item_frame import StepItem
 
@@ -11,20 +12,21 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.move_registry = move_registry
         self.procedure_handler = procedure_handler
         self.queue_frame = queue_frame
-
-        self.move_registry_moves_truncated = [self.truncate_text(s) for s in move_registry.move_dict.keys()]
-
         self.save_callback = save_callback
-        self.steps = []  # 🔥 NEW STRUCTURE
+        self.logger = logger
+
+        # Keep the original-style move list, but preserve a direct name mapping
+        self.move_names = list(self.move_registry.move_dict.keys())
+        self.move_registry_moves_truncated = [self.truncate_text(s) for s in self.move_names]
+
+        # each step is now {"name": str, "args": list}
+        self.steps = []
         self.step_widgets = []
         self.current_file = "No file loaded"
-
-        self.logger = logger
 
         self.undo_stack = []
         self.redo_stack = []
         self.selected_index = None
-
         self.insert_index = None
         self.gap_widgets = []
 
@@ -35,60 +37,110 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=4)
         self.grid_columnconfigure(1, weight=0)
 
-        self.drag_frame = ctk.CTkScrollableFrame(self, fg_color="#1f1f1f")
+        self.drag_frame = ctk.CTkScrollableFrame(self, fg_color="#1f1f1f", corner_radius=0)
         self.drag_frame.grid(row=0, column=0, rowspan=7, sticky="nsew", padx=10, pady=10)
 
-        self.file_label = ctk.CTkLabel(self, text=f"Editing: {self.current_file}", anchor="w")
+        self.file_label = ctk.CTkLabel(
+            self,
+            text=f"Editing: {self.current_file}",
+            height=40,
+            anchor="w"
+        )
         self.file_label.grid(row=0, column=1, padx=10, pady=(10, 5), sticky="new")
 
         self.dropdown = ctk.CTkOptionMenu(
             self,
-            values=self.move_registry_moves_truncated
+            height=60,
+            width=300,
+            corner_radius=0,
+            values=self.move_registry_moves_truncated,
+            text_color=BACKGROUND_COLOR,
+            fg_color=PLAIN_TEXT_COLOR,
+            button_color=PLAIN_TEXT_COLOR,
+            button_hover_color=FOREGROUND_COLOR_TWO
         )
         self.dropdown.set(self.move_registry_moves_truncated[0])
-        self.dropdown.grid(row=1, column=1, padx=10, pady=5)
+        self.dropdown.grid(row=1, column=1, padx=10, pady=5, sticky="new")
 
-        self.add_button = ctk.CTkButton(self, text="Add Step", command=self.add_step)
-        self.add_button.grid(row=2, column=1, padx=10, pady=5)
+        self.add_button = ctk.CTkButton(
+            self,
+            height=60,
+            corner_radius=0,
+            text="Add Step",
+            text_color=BACKGROUND_COLOR,
+            fg_color=PLAIN_TEXT_COLOR,
+            command=self.add_step
+        )
+        self.add_button.grid(row=2, column=1, padx=10, pady=5, sticky="new")
 
-        self.remove_button = ctk.CTkButton(self, text="Remove Step", command=self.remove_step)
-        self.remove_button.grid(row=3, column=1, padx=10, pady=5)
+        self.remove_button = ctk.CTkButton(
+            self,
+            height=60,
+            corner_radius=0,
+            text="Remove Step",
+            text_color=BACKGROUND_COLOR,
+            fg_color=PLAIN_TEXT_COLOR,
+            command=self.remove_step
+        )
+        self.remove_button.grid(row=3, column=1, padx=10, pady=5, sticky="new")
 
-        self.save_button = ctk.CTkButton(self, text="Save Procedure", command=self.save_procedure)
-        self.save_button.grid(row=4, column=1, padx=10, pady=5)
+        self.save_button = ctk.CTkButton(
+            self,
+            height=60,
+            corner_radius=0,
+            text="Save Procedure",
+            text_color=BACKGROUND_COLOR,
+            fg_color=PLAIN_TEXT_COLOR,
+            command=self.save_procedure
+        )
+        self.save_button.grid(row=4, column=1, padx=10, pady=5, sticky="new")
 
-        self.quick_run_button = ctk.CTkButton(self, text="Quick Run", command=self.quick_run)
-        self.quick_run_button.grid(row=5, column=1, padx=10, pady=5)
+        self.quick_run_button = ctk.CTkButton(
+            self,
+            height=60,
+            corner_radius=0,
+            text="Quick Run",
+            text_color=BACKGROUND_COLOR,
+            fg_color=PLAIN_TEXT_COLOR,
+            command=self.quick_run
+        )
+        self.quick_run_button.grid(row=5, column=1, padx=10, pady=5, sticky="new")
 
-    # -------------------------
-    # ADD STEP WITH ARGUMENTS
-    # -------------------------
-    def add_step(self):
-        self.save_state()
+    def _selected_move_full_name(self):
+        """Map the selected truncated dropdown text back to the real move name."""
+        selected = self.dropdown.get()
+        try:
+            idx = self.move_registry_moves_truncated.index(selected)
+            return self.move_names[idx]
+        except ValueError:
+            # fallback: exact match on full names
+            if selected in self.move_names:
+                return selected
+            raise ValueError(f"Move not found: {selected}")
 
-        step_name_truncated = self.dropdown.get()
-
-        # Find full move name
-        full_name = None
-        for k in self.move_registry.move_dict.keys():
-            if self.truncate_text(k) == step_name_truncated:
-                full_name = k
-                break
-
-        if full_name is None:
-            raise ValueError(f"Move not found: {step_name_truncated}")
-
+    def _default_args_for_move(self, full_name):
+        """Create placeholder args based on the function signature."""
         func = self.move_registry.move_dict[full_name]
         sig = signature(func)
 
         default_args = []
-        for param in list(sig.parameters.values())[1:]:  # skip self
+        for param in list(sig.parameters.values())[1:]:  # keep your existing convention
             if param.default is not param.empty:
                 default_args.append(param.default)
             else:
                 default_args.append(0)
+        return default_args
 
-        step = {"name": full_name, "args": default_args}
+    def add_step(self):
+        self.save_state()
+
+        full_name = self._selected_move_full_name()
+        default_args = self._default_args_for_move(full_name)
+
+        step = {
+            "name": full_name,
+            "args": default_args
+        }
 
         if self.insert_index is not None:
             self.steps.insert(self.insert_index, step)
@@ -110,42 +162,50 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
 
         self.refresh_steps()
 
-    # -------------------------
-    # QUICK RUN
-    # -------------------------
     def quick_run(self):
+        """Run the current procedure and refresh the queue."""
         if not self.procedure_handler:
             raise RuntimeError("Procedure handler not initialized")
 
         procedure = self._get_procedure()["Procedure"]
-
         self.procedure_handler.set_procedure(procedure)
 
-        if self.queue_frame:
+        if self.queue_frame is not None:
             self.queue_frame._build_steps(procedure)
 
         self.procedure_handler.begin()
 
+        if self.logger:
+            self.logger.info("Quick Run started!")
+
     def _get_procedure(self):
+        """Convert UI steps into executable procedure format."""
         procedure = []
         for step in self.steps:
             procedure.append([step["name"], *step["args"]])
         return {"Procedure": procedure}
 
-    # -------------------------
-    # UI
-    # -------------------------
+    def move_step(self, old_index, new_index):
+        if new_index < 0 or new_index >= len(self.steps):
+            return
+
+        self.save_state()
+        self.steps.insert(new_index, self.steps.pop(old_index))
+        self.refresh_steps()
+
     def refresh_steps(self):
+        # Destroy all existing step widgets
         for widget in self.step_widgets:
             widget.destroy()
         self.step_widgets = []
 
+        # Destroy all existing gap widgets
         for gap in self.gap_widgets:
             gap.destroy()
         self.gap_widgets = []
 
+        # Original layout style: gap, step, gap, step, ...
         total_positions = len(self.steps) + 1
-
         for pos in range(total_positions):
             gap = ctk.CTkFrame(self.drag_frame, height=8, fg_color=BACKGROUND_COLOR)
             gap.pack(fill="x", padx=5, pady=2)
@@ -154,11 +214,9 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
 
             if pos < len(self.steps):
                 step = self.steps[pos]
-                step_name = self.truncate_text(step["name"])
-
                 item = StepItem(
                     self.drag_frame,
-                    text=step_name,
+                    text=step["name"],
                     index=pos,
                     args=step["args"],
                     move_callback=self.move_step,
@@ -170,19 +228,15 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.update_selection_visuals()
         self.update_gap_visuals()
 
-    def move_step(self, old_index, new_index):
-        if new_index < 0 or new_index >= len(self.steps):
-            return
-
-        self.save_state()
-        self.steps.insert(new_index, self.steps.pop(old_index))
-        self.refresh_steps()
-
     def save_procedure(self):
         if self.save_callback:
             self.save_callback(self.steps)
         else:
             print("Saved:", self.steps)
+
+    def set_current_file(self, filename):
+        self.current_file = filename
+        self.file_label.configure(text=f"Editing: {self.current_file}")
 
     def undo(self, event=None):
         if not self.undo_stack:
@@ -208,19 +262,22 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.update_selection_visuals()
         self.update_gap_visuals()
 
+    def update_selection_visuals(self):
+        for i, widget in enumerate(self.step_widgets):
+            widget.set_selected(i == self.selected_index)
+
     def select_gap(self, index):
         self.insert_index = index
         self.selected_index = None
         self.update_selection_visuals()
         self.update_gap_visuals()
 
-    def update_selection_visuals(self):
-        for i, widget in enumerate(self.step_widgets):
-            widget.set_selected(i == self.selected_index)
-
     def update_gap_visuals(self):
         for i, gap in enumerate(self.gap_widgets):
-            gap.configure(fg_color="red" if i == self.insert_index else BACKGROUND_COLOR)
+            if i == self.insert_index:
+                gap.configure(fg_color="red")
+            else:
+                gap.configure(fg_color=BACKGROUND_COLOR)
 
     @staticmethod
     def truncate_text(s, max_chars=25):
