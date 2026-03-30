@@ -1,66 +1,78 @@
 import customtkinter as ctk
-from ...components.constants import *
+
 
 class StepItem(ctk.CTkFrame):
-    def __init__(self, master, text, index, move_callback, select_callback, **kwargs):
-        super().__init__(master, fg_color=FOREGROUND_COLOR, **kwargs)
+    def __init__(self, master, text, index, args, move_callback, select_callback):
+        super().__init__(master, corner_radius=5)
 
         self.index = index
         self.move_callback = move_callback
         self.select_callback = select_callback
 
-        self.default_bg = BACKGROUND_COLOR
-        self.selected_bg = FOREGROUND_COLOR
-        self.configure(fg_color=self.default_bg)  # default color
+        self.args = args
+        self.entries = []
 
+        # --- STEP LABEL ---
+        self.label = ctk.CTkLabel(self, text=text, anchor="w")
+        self.label.pack(fill="x", padx=5, pady=2)
 
-        self.grid_columnconfigure(1, weight=1)
+        self.label.bind("<Button-1>", lambda e: self.select_callback(self.index))
 
-        # Up button
-        self.up_button = ctk.CTkButton(
-            self,
-            text="↑",
-            text_color = BACKGROUND_COLOR, 
-            fg_color = PLAIN_TEXT_COLOR,
-            width=30,
-            command=self.move_up
-        )
-        self.up_button.grid(row=0, column=0, padx=5, pady=5)
+        # --- ARGUMENT INPUTS ---
+        self.args_frame = ctk.CTkFrame(self)
+        self.args_frame.pack(fill="x", padx=5, pady=2)
 
-        # Label
-        self.label = ctk.CTkLabel(self, text=text, font = ("roboto", 20), compound = "center")
-        self.label.grid(row=0, column=1, sticky="ew", padx=5)
+        for i, val in enumerate(self.args):
+            container = ctk.CTkFrame(self.args_frame, fg_color="transparent")
+            container.pack(side="left", padx=2)
 
-        self.bind("<Button-1>", self.on_click)
-        self.label.bind("<Button-1>", self.on_click)
+            # OPTIONAL: argument label (index-based for now, safe)
+            arg_label = ctk.CTkLabel(container, text=f"{i}:", width=10)
+            arg_label.pack(side="left")
 
-        # Down button
-        self.down_button = ctk.CTkButton(
-            self,
-            text="↓",
-            text_color = BACKGROUND_COLOR, 
-            fg_color = PLAIN_TEXT_COLOR,
-            width=30,
-            command=self.move_down
-        )
-        self.down_button.grid(row=0, column=2, padx=5, pady=5)
+            entry = ctk.CTkEntry(container, width=60)
+            entry.insert(0, str(val))
+            entry.pack(side="left")
 
-    def move_up(self):
-        self.move_callback(self.index, self.index - 1)
+            # 🔥 safer binding (avoids late-binding issues)
+            entry.bind("<FocusOut>", self._make_update_callback(i))
 
-    def move_down(self):
-        self.move_callback(self.index, self.index + 1)
+            self.entries.append(entry)
 
-    def set_text(self, text):
-        self.label.configure(text=text)
+    # -------------------------
+    # SAFE CALLBACK GENERATOR
+    # -------------------------
+    def _make_update_callback(self, index):
+        return lambda event: self.update_arg(index)
 
-    def on_click(self, event):
-        self.select_callback(self.index)
+    # -------------------------
+    # ARG UPDATE LOGIC
+    # -------------------------
+    def update_arg(self, index):
+        try:
+            raw_value = self.entries[index].get().strip()
 
-    def set_selected(self, selected: bool):
-        """Change background color based on selection"""
+            # Try int
+            try:
+                value = int(raw_value)
+            except ValueError:
+                # Try float
+                try:
+                    value = float(raw_value)
+                except ValueError:
+                    # Keep as string
+                    value = raw_value
+
+            self.args[index] = value
+
+        except Exception:
+            pass
+
+    # -------------------------
+    # SELECTION VISUAL
+    # -------------------------
+    def set_selected(self, selected):
         if selected:
-            self.configure(fg_color=self.selected_bg)
+            self.configure(fg_color="#444444")
         else:
-            self.configure(fg_color=self.default_bg)
-
+            self.configure(fg_color="transparent")
