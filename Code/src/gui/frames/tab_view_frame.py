@@ -1,7 +1,7 @@
 import customtkinter as ctk
 from ..components.constants import *
 
-from ..frames import FileManagerFrame, SettingsFrame
+from ..frames import FileManagerFrame, SettingsFrame, ArucoCalibrationFrame
 
 from .procedure_viewer import ProcedureViewerFrame
 from .procedure_builder import ProcedureBuilderFrame
@@ -55,6 +55,13 @@ class TabViewFrame(ctk.CTkFrame):
         self.file_manager_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
         self.file_manager_frame.grid_remove()
 
+        self.aruco_calibration_frame = ArucoCalibrationFrame(
+            master = self,
+            dispatcher = self.dispatcher
+        )
+        self.aruco_calibration_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
+        self.aruco_calibration_frame.grid_remove()
+
         self.procedure_builder_frame.queue_frame = self.procedure_viewer_frame.procedure_queue_frame
 
         # Dictionary so the goto_tab correctly maps a tab with its frame. 
@@ -63,7 +70,8 @@ class TabViewFrame(ctk.CTkFrame):
             "procedure_builder": self.procedure_builder_frame,
             "procedure_viewer": self.procedure_viewer_frame,
             "file_manager": self.file_manager_frame,
-            "settings": self.settings_frame
+            "settings": self.settings_frame,
+            "aruco_calibration": self.aruco_calibration_frame
         }
 
         self.current_tab_name = "file_manager" 

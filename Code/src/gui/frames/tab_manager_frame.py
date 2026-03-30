@@ -33,6 +33,9 @@ class TabManagerFrame(ctk.CTkFrame):
         self.unselected_settings_image = self.path_to_ctk_image("gui/icons/unselected_settings.png")
         self.selected_settings_image = self.path_to_ctk_image("gui/icons/selected_settings.png")
 
+        self.unselected_calibration_image = self.path_to_ctk_image("gui/icons/unselected_settings.png")  # Reuse settings icon for now
+        self.selected_calibration_image = self.path_to_ctk_image("gui/icons/selected_settings.png")      # Reuse settings icon for now
+
         # File tab button
         self.file_tab_button = ctk.CTkButton(
             master = self,
@@ -93,6 +96,22 @@ class TabManagerFrame(ctk.CTkFrame):
         )
         self.settings_tab_button.grid(row = 4, column = 0, padx = 0, pady = 0, sticky = "sew")
         self.frame_image_bindings(self.settings_tab_button, self.unselected_settings_image, self.selected_settings_image) #Binds the hover actions to file icon replacement
+        
+        # Calibration tab button (ArUco marker calibration)
+        self.calibration_tab_button = ctk.CTkButton(
+            master = self,
+            width = 70, 
+            height = 70, 
+            corner_radius = 0,
+            fg_color = FOREGROUND_COLOR,
+            hover_color = FOREGROUND_COLOR,
+            image = self.unselected_calibration_image,
+            text = "",
+            command = lambda: self.controller.switch_tab("aruco_calibration") 
+        )
+        self.calibration_tab_button.grid(row = 5, column = 0, padx = 0, pady = 0, sticky = "sew")
+        self.frame_image_bindings(self.calibration_tab_button, self.unselected_calibration_image, self.selected_calibration_image)
+        
         # Binds buttons on bottom to dissapear when tab selection buttons collide
         self.master.bind("<Configure>",lambda e: self.hide_overlapping_frames(disp_frame = self.procedure_tab_button, hide_frame = self.settings_tab_button))
 

@@ -3,6 +3,7 @@ from .info_frame import InfoFrame
 from .settings_frame import SettingsFrame
 from .tab_manager_frame import TabManagerFrame
 from .tab_view_frame import TabViewFrame
+from .calibration import ArucoCalibrationFrame
 
 from .procedure_builder import *
 from .procedure_viewer import *
