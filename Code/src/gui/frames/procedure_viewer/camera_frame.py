@@ -3,7 +3,7 @@ import cv2
 import logging
 from PIL import Image, ImageTk
 from ...components.constants import *
-from ....drivers.aruco_detector_driver import ArucoDetector
+from drivers.aruco_detector_driver import ArucoDetector
 
 class CameraFrame(ctk.CTkFrame):
     """Frame for displaying camera feed with ArUco marker detection and annotation"""
