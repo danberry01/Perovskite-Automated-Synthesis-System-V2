@@ -27,7 +27,10 @@ class ProcedureHandler(threading.Thread):
         self.start()
 
         self.error_flag = False
-        self.error_step_index = None    
+        self.error_step_index = None
+        
+        # Configurable minimum step duration (in seconds) to ensure UI updates
+        self.min_step_duration = 0.5    
 
     def set_procedure(self, procedure: list):
         """Set the procedure to be run.
@@ -52,6 +55,8 @@ class ProcedureHandler(threading.Thread):
             self.started.wait()
             
             self.current_step = 0
+            self.error_flag = False
+            self.error_step_index = None
             
             while self.started.is_set() and (self.current_step < len(self.procedure)):
                 
@@ -61,30 +66,47 @@ class ProcedureHandler(threading.Thread):
                 
                 move = self.procedure[self.current_step]
                 
-                self.logger.debug(f"Executing move {self.current_step}")
                 func_name = move[0]
                 func_args = move[1:]
+                
+                # Format args for logging
+                args_str = ", ".join(str(arg) for arg in func_args) if func_args else ""
+                
+                # Log the step we're executing
+                self.logger.info(f"Step {self.current_step + 1}/{len(self.procedure)}: {func_name}({args_str})")
+                
+                step_start_time = time.time()
 
                 # try running the move, stopping if there are any errors
                 try:
                     self.move_registry.move_dict[func_name](*func_args)
+                    self.logger.debug(f"Step {self.current_step} completed successfully")
                 except Exception as e:
-                    self.logger.error(f"Error while running procedure: {e}")
+                    self.logger.error(f"Error in step {self.current_step}: {e}")
                     self.error_flag = True
                     self.error_step_index = self.current_step
                     break
-                self.logger.debug(f"Move Done")
-                self.current_step+=1
+                
+                # Ensure minimum step duration for UI responsiveness
+                elapsed = time.time() - step_start_time
+                if elapsed < self.min_step_duration:
+                    sleep_time = self.min_step_duration - elapsed
+                    time.sleep(sleep_time)
+                
+                self.current_step += 1
                 time.sleep(0.2)
             
                 # if procedure is paused after finishing previous move
                 if self.paused.is_set():
-                    self.logger.info("Paused")
+                    self.logger.info("Paused at step {}".format(self.current_step))
                     self.procedure_timer.pause()
                     while self.paused.is_set():
                         time.sleep(0.1)
                     self.procedure_timer.unpause()
-                    self.logger.info("Unpaused")
+                    self.logger.info("Resumed from step {}".format(self.current_step))
+            
+            if self.current_step >= len(self.procedure):
+                self.logger.info("Procedure completed successfully - all {} steps executed".format(len(self.procedure)))
             
             self.stop()
             self.logger.debug("Procedure Ended")
@@ -144,6 +166,15 @@ class ProcedureHandler(threading.Thread):
     def get_error_step_index(self):
         """Get the index of the step that caused an error"""
         return self.error_step_index
+    
+    def set_min_step_duration(self, duration_seconds: float):
+        """Set the minimum duration each step should take (for visual feedback)
+        
+        Args:
+            duration_seconds (float): Minimum duration in seconds (e.g., 0.5 for 500ms)
+        """
+        self.min_step_duration = max(0, duration_seconds)
+        self.logger.debug(f"Minimum step duration set to {self.min_step_duration}s")
     
     #set the number of procedurs to run
     def set_procedure_loop_count(self, new_loop_count):

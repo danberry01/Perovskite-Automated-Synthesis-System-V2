@@ -44,7 +44,10 @@ class TabViewFrame(ctk.CTkFrame):
         # Pause updates since this tab is not active initially
         self.procedure_viewer_frame.pause_updates()
 
-        self.settings_frame = SettingsFrame(master = self)
+        self.settings_frame = SettingsFrame(
+            master = self,
+            procedure_handler = self.procedure_handler
+        )
         self.settings_frame.grid(row = 0, column = 0, padx = 0, pady = 0, sticky = "nsew")
         self.settings_frame.grid_remove()
 
