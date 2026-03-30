@@ -42,12 +42,12 @@ if __name__ == "__main__":
     # #enable software pwm
     # Device.pin_factory = PiGPIOFactory()
     
-    # # -- LOGGING --
-    # logger = logging.getLogger("Main Logger")
-    # console_handler = logging.StreamHandler()
-    # console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    # logger.addHandler(console_handler)
-    # logger.setLevel(logging.DEBUG)
+    # -- LOGGING --
+    logger = logging.getLogger("Main Logger")
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter('%(levelname)s\t%(asctime)s: %(message)s'))
+    logger.addHandler(console_handler)
+    logger.setLevel(logging.DEBUG)
  
     dispatcher = Dispatcher()
 

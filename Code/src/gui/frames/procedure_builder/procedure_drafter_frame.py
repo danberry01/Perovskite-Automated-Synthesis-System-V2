@@ -162,50 +162,46 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
 
         self.refresh_steps()
 
-  # --- Quick Run Integration ---
-    def quick_run(self, func_name: str, args: list):
+    def quick_run(self):
         """
-        Run a single move immediately, even if no procedure is loaded.
-        Also displays it in the procedure queue as a temporary step.
+        Run the current procedure immediately.
+        Send the current steps to the procedure handler and start execution.
         """
-        # 1. Validate the move
-        if func_name not in self.dispatcher.move_registry.move_dict:
-            self.logger.error(f"Move {func_name} not found")
+        import threading
+        import logging
+        
+        if not self.steps:
+            logging.getLogger("Main Logger").warning("No steps to run")
             return
-
-        move_func = self.dispatcher.move_registry.move_dict[func_name]
-
-        # Try to bind args
-        from inspect import signature
-        try:
-            sig = signature(move_func)
-            sig.bind(*args)
-        except TypeError as e:
-            self.logger.error(f"Invalid arguments for {func_name}: {e}")
-            return
-
-        # 2. Add temporary step to queue for display
-        temp_step = StepItem(
-            master=self.procedure_queue_frame,
-            text=func_name,
-            index=len(self.procedure_steps),
-            args=args,
-            move_callback=self.move_step,
-            select_callback=self.select_step
-        )
-        temp_step.pack(fill="x", pady=2)
-        self.procedure_steps.append(temp_step)
-
-    # 3. Run move immediately in a separate thread to avoid blocking GUI
-    import threading
-    def run_move():
-        try:
-            self.dispatcher.move_registry.move_dict[func_name](*args)
-            self.logger.info(f"Quick Run: {func_name} completed")
-        except Exception as e:
-            self.logger.error(f"Quick Run Error in {func_name}: {e}")
-
-    threading.Thread(target=run_move, daemon=True).start()
+        
+        # Convert UI steps into executable procedure format
+        procedure = []
+        for step in self.steps:
+            procedure.append([step["name"], *step["args"]])
+        
+        # Set the procedure in the handler
+        if self.procedure_handler:
+            self.procedure_handler.set_procedure(procedure)
+            
+            # Update the queue frame display if available
+            if self.queue_frame:
+                self.queue_frame._build_steps(procedure)
+                self.queue_frame.current_procedure = "Quick Run"
+                self.queue_frame.current_procedure_label.configure(
+                    text=f"Current Procedure: Quick Run - {len(procedure)} steps"
+                )
+            
+            # Start execution in a separate thread
+            def run_procedure():
+                try:
+                    self.procedure_handler.begin()
+                except Exception as e:
+                    logging.getLogger("Main Logger").error(f"Error running procedure: {e}")
+            
+            threading.Thread(target=run_procedure, daemon=True).start()
+            logging.getLogger("Main Logger").info(f"Quick Run: Starting procedure with {len(procedure)} steps")
+        else:
+            logging.getLogger("Main Logger").error("No procedure handler available")
 
     def _get_procedure(self):
         """Convert UI steps into executable procedure format."""

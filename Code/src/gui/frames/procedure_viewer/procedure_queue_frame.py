@@ -105,7 +105,7 @@ class ProcedureQueueFrame(ctk.CTkFrame):
         self.steps_container.grid(row=4, column=0, columnspan=4, sticky="nsew", padx=10, pady=10)
 
         self.grid_rowconfigure(4, weight=1)
-        
+
         self.load_default_procedure()
         self._update()
 
@@ -235,19 +235,38 @@ class ProcedureQueueFrame(ctk.CTkFrame):
 
     def load_default_procedure(self):
         """Load the default procedure from disk at startup."""
-        default_path = os.path.join("src", "procedures", "default_procedure.yml")
+        # Try multiple paths to find the default procedure
+        possible_paths = [
+            os.path.join("src", "procedures", "default_procedure.yml"),
+            os.path.join("..", "..", "procedures", "default_procedure.yml"),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "procedures", "default_procedure.yml"))
+        ]
+        
+        for path in possible_paths:
+            try:
+                file = ProcedureFile().Open(path=path)
+                if file is None:
+                    continue
+                    
+                procedure = file.get("Procedure")
+                if procedure is None:
+                    continue
 
-        try:
-            file = ProcedureFile().Open(path=default_path)
-            procedure = file["Procedure"]
+                self.procedure_handler.set_procedure(procedure)
+                self.current_procedure = os.path.basename(path)
+                self.current_procedure_label.configure(
+                    text=f"Current Procedure: {self.current_procedure}"
+                )
 
-            self.procedure_handler.set_procedure(procedure)
-            self.current_procedure = os.path.basename(default_path)
-            self.current_procedure_label.configure(
-                text=f"Current Procedure: {self.current_procedure}"
-            )
-
-            self._build_steps(procedure)
-
-        except Exception as e:
-            self.logger.error(f"Failed to load default procedure: {e}")
+                self._build_steps(procedure)
+                self.logger.info(f"Loaded default procedure: {path}")
+                return
+                
+            except Exception as e:
+                continue
+        
+        # If we get here, no procedure was loaded
+        self.logger.warning("Could not load default procedure from any path")
+        self.current_procedure_label.configure(
+            text="No Procedure Loaded - Use Import to load one"
+        )

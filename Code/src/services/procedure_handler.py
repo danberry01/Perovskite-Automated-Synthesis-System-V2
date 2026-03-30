@@ -133,6 +133,18 @@ class ProcedureHandler(threading.Thread):
       
         return self.current_step / len(self.procedure)
     
+    def get_current_step_index(self):
+        """Get the current step index in the procedure"""
+        return self.current_step
+
+    def has_error(self):
+        """Check if an error occurred during execution"""
+        return self.error_flag
+
+    def get_error_step_index(self):
+        """Get the index of the step that caused an error"""
+        return self.error_step_index
+    
     #set the number of procedurs to run
     def set_procedure_loop_count(self, new_loop_count):
         if self.started.is_set():
@@ -175,13 +187,3 @@ class Timer():
             return self.pause_time.replace(microsecond=0) - self.start_time.replace(microsecond=0)
         else:
             return datetime.now().replace(microsecond=0) - self.start_time.replace(microsecond=0)
-        
-    def get_current_step_index(self):
-        return self.current_step
-
-    def has_error(self):
-        return self.error_flag
-
-    def get_error_step_index(self):
-        return self.error_step_index
-        
