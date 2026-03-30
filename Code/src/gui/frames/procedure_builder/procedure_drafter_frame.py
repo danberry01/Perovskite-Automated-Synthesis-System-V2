@@ -24,6 +24,9 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.save_callback = save_callback
         self.logger = logger
 
+        # Determine procedures directory
+        self.procedures_dir = self._get_procedures_dir()
+
         # Keep the original-style move list, but preserve a direct name mapping
         self.move_names = list(self.move_registry.move_dict.keys())
         self.move_registry_moves_truncated = [self.truncate_text(s) for s in self.move_names]
@@ -32,6 +35,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.steps = []
         self.step_widgets = []
         self.current_file = "No file loaded"
+        self.current_file_path = None  # Track the full path to the current file
 
         self.undo_stack = []
         self.redo_stack = []
@@ -42,12 +46,12 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.master.bind("<Control-z>", self.undo)
         self.master.bind("<Control-Shift-Z>", self.redo)
 
-        self.grid_rowconfigure(8, weight=1)
+        self.grid_rowconfigure(9, weight=1)
         self.grid_columnconfigure(0, weight=4)
         self.grid_columnconfigure(1, weight=0)
 
         self.drag_frame = ctk.CTkScrollableFrame(self, fg_color="#1f1f1f", corner_radius=0)
-        self.drag_frame.grid(row=0, column=0, rowspan=8, sticky="nsew", padx=10, pady=10)
+        self.drag_frame.grid(row=0, column=0, rowspan=9, sticky="nsew", padx=10, pady=10)
 
         self.file_label = ctk.CTkLabel(
             self,
@@ -126,6 +130,17 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         )
         self.save_button.grid(row=6, column=1, padx=10, pady=5, sticky="new")
 
+        self.save_as_button = ctk.CTkButton(
+            self,
+            height=60,
+            corner_radius=0,
+            text="Save As",
+            text_color=BACKGROUND_COLOR,
+            fg_color=PLAIN_TEXT_COLOR,
+            command=self._save_as_procedure
+        )
+        self.save_as_button.grid(row=7, column=1, padx=10, pady=5, sticky="new")
+
         self.quick_run_button = ctk.CTkButton(
             self,
             height=60,
@@ -135,16 +150,37 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             fg_color=PLAIN_TEXT_COLOR,
             command=self.quick_run
         )
-        self.quick_run_button.grid(row=7, column=1, padx=10, pady=5, sticky="new")
+        self.quick_run_button.grid(row=8, column=1, padx=10, pady=5, sticky="new")
 
     def new_procedure(self):
         """Clear all steps and start a new procedure"""
         self.save_state()
         self.steps = []
-        self.current_file = "No file loaded"
+        self.current_file = "Unsaved Procedure"
+        self.current_file_path = None
         self.file_label.configure(text=f"Editing: {self.current_file}")
         self.refresh_steps()
         logging.getLogger("Main Logger").info("New procedure started")
+
+    def _get_procedures_dir(self):
+        """Get the absolute path to the procedures directory"""
+        # Try multiple locations
+        possible_dirs = [
+            os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'procedures')),
+            os.path.abspath(os.path.join(os.getcwd(), 'src', 'procedures')),
+            os.path.abspath(os.path.join(os.getcwd(), 'procedures')),
+        ]
+        
+        for proc_dir in possible_dirs:
+            if os.path.isdir(proc_dir):
+                logging.getLogger("Main Logger").debug(f"Using procedures directory: {proc_dir}")
+                return proc_dir
+        
+        # If no directory exists, use the first option and try to create it
+        default_dir = possible_dirs[0]
+        os.makedirs(default_dir, exist_ok=True)
+        logging.getLogger("Main Logger").info(f"Created procedures directory: {default_dir}")
+        return default_dir
 
     def _selected_move_full_name(self):
         """Map the selected truncated dropdown text back to the real move name."""
@@ -299,8 +335,18 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             logging.getLogger("Main Logger").warning("No steps to save")
             return
         
+        # If file already has a path, save to that path directly
+        if self.current_file_path:
+            self._save_to_file(self.current_file_path)
+            return
+        
+        # Otherwise, ask for a new file
+        self._save_as_procedure()
+
+    def _save_as_procedure(self):
+        """Save as with file dialog"""
         file_path = filedialog.asksaveasfilename(
-            initialdir="src/procedures/",
+            initialdir=self.procedures_dir,
             defaultextension=".yml",
             filetypes=(("YAML files", "*.yml"), ("All files", "*.*"))
         )
@@ -308,28 +354,48 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         if not file_path:
             return
         
+        self._save_to_file(file_path)
+
+    def _save_to_file(self, file_path):
+        """Actually save the file"""
         try:
+            # Ensure .yml extension
+            if not file_path.endswith('.yml'):
+                file_path += '.yml'
+            
             # Convert steps to procedure format
             procedure = []
             for step in self.steps:
                 procedure.append([step["name"], *step["args"]])
             
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
             # Save using ProcedureFile driver
             file_driver = ProcedureFile()
             file_driver.Save(file_path, {"Procedure": procedure})
             
-            # Update the label
-            self.current_file = os.path.basename(file_path)
-            self.file_label.configure(text=f"Editing: {self.current_file}")
-            
-            logging.getLogger("Main Logger").info(f"Procedure saved to {file_path}")
+            # Verify file was actually created
+            if os.path.exists(file_path):
+                # Update tracking
+                self.current_file_path = file_path
+                self.current_file = os.path.basename(file_path)
+                self.file_label.configure(text=f"Editing: {self.current_file}")
+                
+                file_size = os.path.getsize(file_path)
+                logging.getLogger("Main Logger").info(f"Procedure saved to {file_path} ({file_size} bytes)")
+            else:
+                logging.getLogger("Main Logger").error(f"File write failed - file does not exist: {file_path}")
+                
         except Exception as e:
             logging.getLogger("Main Logger").error(f"Failed to save procedure: {e}")
+            import traceback
+            traceback.print_exc()
 
     def load_procedure(self):
         """Load a procedure from a YAML file"""
         file_path = filedialog.askopenfilename(
-            initialdir="src/procedures/",
+            initialdir=self.procedures_dir,
             filetypes=(("YAML files", "*.yml*"),)
         )
         
@@ -365,16 +431,19 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
                     }
                     self.steps.append(step)
             
-            # Update the label
+            # Update tracking
+            self.current_file_path = file_path
             self.current_file = os.path.basename(file_path)
             self.file_label.configure(text=f"Editing: {self.current_file}")
             
             # Refresh display
             self.refresh_steps()
             
-            logging.getLogger("Main Logger").info(f"Procedure loaded from {file_path}")
+            logging.getLogger("Main Logger").info(f"Procedure loaded from {file_path} ({len(self.steps)} steps)")
         except Exception as e:
             logging.getLogger("Main Logger").error(f"Failed to load procedure: {e}")
+            import traceback
+            traceback.print_exc()
 
     def set_current_file(self, filename):
         self.current_file = filename
