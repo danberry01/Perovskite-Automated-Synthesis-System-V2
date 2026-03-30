@@ -36,6 +36,12 @@ class ProcedureViewerFrame(ctk.CTkFrame):
         self.spectrometer_frame = SpectrometerFrame(master = self)
         self.spectrometer_frame.grid(row = 1, column = 0, padx = 10, pady = 10, sticky = "nsew")
 
-
-
-
+    def pause_updates(self):
+        """Pause all update loops in this frame"""
+        self.camera_frame.pause_video_feed()
+        self.console_frame.pause_update()
+    
+    def resume_updates(self):
+        """Resume all update loops in this frame"""
+        self.camera_frame.resume_video_feed()
+        self.console_frame.resume_update()

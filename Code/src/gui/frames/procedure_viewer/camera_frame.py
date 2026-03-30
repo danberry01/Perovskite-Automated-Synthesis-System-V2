@@ -10,6 +10,9 @@ class CameraFrame(ctk.CTkFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, fg_color = FOREGROUND_COLOR, corner_radius = 0)
         
+        # Video feed update tracking
+        self._video_feed_after_id = None
+        self._is_paused = False
 
         # Geometry data for what the pose detector expects
         self.data = np.load("gui/components/calibration_data.npz")
@@ -69,13 +72,18 @@ class CameraFrame(ctk.CTkFrame):
     # put this somewhere else later
     # Defines the function to open the camera and process the frames continuously
     def update_video_feed(self):
+        
+        # Check if paused - don't process frames but keep the loop scheduled
+        if self._is_paused:
+            self._video_feed_after_id = self.myVideoWidget.after(20, self.update_video_feed)
+            return
 
         # Reads one frame from the camera
         ret, frame = self.myVideoCapture.read()
 
         # Tells the function to rerun in 10ms if a frame is not detected (ret is a bool to determine if the frame was captured correctly)
         if not ret:
-            self.myVideoWidget.after(10, self.update_video_feed)
+            self._video_feed_after_id = self.myVideoWidget.after(10, self.update_video_feed)
             return
 
         # Converts the frame to grayscale
@@ -173,4 +181,14 @@ class CameraFrame(ctk.CTkFrame):
         self.myVideoWidget.configure(image=ctk_image)
         self.myVideoWidget.image = ctk_image  # prevent garbage collection
 
-        self.myVideoWidget.after(20, self.update_video_feed)
+        self._video_feed_after_id = self.myVideoWidget.after(20, self.update_video_feed)
+
+    def pause_video_feed(self):
+        """Pause the video feed processing to reduce CPU usage"""
+        self._is_paused = True
+
+    def resume_video_feed(self):
+        """Resume the video feed processing"""
+        self._is_paused = False
+        if self._video_feed_after_id is None:
+            self.update_video_feed()

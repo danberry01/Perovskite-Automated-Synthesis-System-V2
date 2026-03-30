@@ -11,6 +11,10 @@ class ConsoleFrame(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master=master,fg_color = FOREGROUND_COLOR, border_width=2, corner_radius=0 )
         
+        # Update loop tracking  
+        self._update_after_id = None
+        self._is_paused = False
+        
         self.logger = logging.getLogger("Main Logger")
         self.log_queue = Queue()
         self.console_handler = ConsoleLogHandler(self)
@@ -66,16 +70,23 @@ class ConsoleFrame(ctk.CTkFrame):
         super().destroy()
         
     def _update(self):
-        while not self.log_queue.empty():
-            msg = self.log_queue.get()
-            self.write_to_console(msg)
-            self.log_queue.task_done()
-            self.console.see("end")
-            
-            
-      
+        # Don't process messages if paused, but keep scheduling the loop
+        if not self._is_paused:
+            while not self.log_queue.empty():
+                msg = self.log_queue.get()
+                self.write_to_console(msg)
+                self.log_queue.task_done()
+                self.console.see("end")
         
-        self.after(50, self._update)
+        self._update_after_id = self.after(50, self._update)
+    
+    def pause_update(self):
+        """Pause console updates to reduce CPU usage"""
+        self._is_paused = True
+    
+    def resume_update(self):
+        """Resume console updates"""
+        self._is_paused = False
 
     def write_to_console(self, text: str):
         """ Write a message to the console
