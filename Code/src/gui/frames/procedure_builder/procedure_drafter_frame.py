@@ -1,8 +1,17 @@
 import customtkinter as ctk
 from inspect import signature
+from tkinter import filedialog
+import logging
+import os
+import sys
 
 from ...components.constants import *
 from .step_item_frame import StepItem
+
+# Import procedure file driver
+path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+sys.path.append(path)
+from drivers.procedure_file_driver import ProcedureFile
 
 
 class ProcedureDrafterFrame(ctk.CTkFrame):
@@ -38,7 +47,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.grid_columnconfigure(1, weight=0)
 
         self.drag_frame = ctk.CTkScrollableFrame(self, fg_color="#1f1f1f", corner_radius=0)
-        self.drag_frame.grid(row=0, column=0, rowspan=7, sticky="nsew", padx=10, pady=10)
+        self.drag_frame.grid(row=0, column=0, rowspan=8, sticky="nsew", padx=10, pady=10)
 
         self.file_label = ctk.CTkLabel(
             self,
@@ -84,6 +93,17 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         )
         self.remove_button.grid(row=3, column=1, padx=10, pady=5, sticky="new")
 
+        self.load_button = ctk.CTkButton(
+            self,
+            height=60,
+            corner_radius=0,
+            text="Load Procedure",
+            text_color=BACKGROUND_COLOR,
+            fg_color=PLAIN_TEXT_COLOR,
+            command=self.load_procedure
+        )
+        self.load_button.grid(row=4, column=1, padx=10, pady=5, sticky="new")
+
         self.save_button = ctk.CTkButton(
             self,
             height=60,
@@ -93,7 +113,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             fg_color=PLAIN_TEXT_COLOR,
             command=self.save_procedure
         )
-        self.save_button.grid(row=4, column=1, padx=10, pady=5, sticky="new")
+        self.save_button.grid(row=5, column=1, padx=10, pady=5, sticky="new")
 
         self.quick_run_button = ctk.CTkButton(
             self,
@@ -104,7 +124,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             fg_color=PLAIN_TEXT_COLOR,
             command=self.quick_run
         )
-        self.quick_run_button.grid(row=5, column=1, padx=10, pady=5, sticky="new")
+        self.quick_run_button.grid(row=6, column=1, padx=10, pady=5, sticky="new")
 
     def _selected_move_full_name(self):
         """Map the selected truncated dropdown text back to the real move name."""
@@ -254,10 +274,87 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.update_gap_visuals()
 
     def save_procedure(self):
-        if self.save_callback:
-            self.save_callback(self.steps)
-        else:
-            print("Saved:", self.steps)
+        """Save the current procedure to a YAML file"""
+        if not self.steps:
+            logging.getLogger("Main Logger").warning("No steps to save")
+            return
+        
+        file_path = filedialog.asksaveasfilename(
+            initialdir="src/procedures/",
+            defaultextension=".yml",
+            filetypes=(("YAML files", "*.yml"), ("All files", "*.*"))
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            # Convert steps to procedure format
+            procedure = []
+            for step in self.steps:
+                procedure.append([step["name"], *step["args"]])
+            
+            # Save using ProcedureFile driver
+            file_driver = ProcedureFile()
+            file_driver.Save(file_path, {"Procedure": procedure})
+            
+            # Update the label
+            self.current_file = os.path.basename(file_path)
+            self.file_label.configure(text=f"Editing: {self.current_file}")
+            
+            logging.getLogger("Main Logger").info(f"Procedure saved to {file_path}")
+        except Exception as e:
+            logging.getLogger("Main Logger").error(f"Failed to save procedure: {e}")
+
+    def load_procedure(self):
+        """Load a procedure from a YAML file"""
+        file_path = filedialog.askopenfilename(
+            initialdir="src/procedures/",
+            filetypes=(("YAML files", "*.yml*"),)
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            # Load using ProcedureFile driver
+            file_driver = ProcedureFile()
+            file_data = file_driver.Open(path=file_path)
+            
+            if file_data is None:
+                logging.getLogger("Main Logger").error(f"Could not open file: {file_path}")
+                return
+            
+            procedure = file_data.get("Procedure")
+            if not procedure:
+                logging.getLogger("Main Logger").error("No 'Procedure' key found in file")
+                return
+            
+            # Clear current steps
+            self.steps = []
+            
+            # Convert procedure format to step format
+            for proc_step in procedure:
+                if isinstance(proc_step, list) and len(proc_step) > 0:
+                    func_name = proc_step[0]
+                    func_args = proc_step[1:]
+                    
+                    step = {
+                        "name": func_name,
+                        "args": list(func_args)
+                    }
+                    self.steps.append(step)
+            
+            # Update the label
+            self.current_file = os.path.basename(file_path)
+            self.file_label.configure(text=f"Editing: {self.current_file}")
+            
+            # Refresh display
+            self.refresh_steps()
+            
+            logging.getLogger("Main Logger").info(f"Procedure loaded from {file_path}")
+        except Exception as e:
+            logging.getLogger("Main Logger").error(f"Failed to load procedure: {e}")
 
     def set_current_file(self, filename):
         self.current_file = filename
