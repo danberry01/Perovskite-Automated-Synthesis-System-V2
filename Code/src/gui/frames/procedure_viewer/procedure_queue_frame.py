@@ -105,7 +105,8 @@ class ProcedureQueueFrame(ctk.CTkFrame):
         self.steps_container.grid(row=4, column=0, columnspan=4, sticky="nsew", padx=10, pady=10)
 
         self.grid_rowconfigure(4, weight=1)
-
+        
+        self.load_default_procedure()
         self._update()
 
     # -------------------------
@@ -231,3 +232,22 @@ class ProcedureQueueFrame(ctk.CTkFrame):
             )
 
             self._build_steps(procedure)
+
+    def load_default_procedure(self):
+        """Load the default procedure from disk at startup."""
+        default_path = os.path.join("src", "procedures", "default_procedure.yml")
+
+        try:
+            file = ProcedureFile().Open(path=default_path)
+            procedure = file["Procedure"]
+
+            self.procedure_handler.set_procedure(procedure)
+            self.current_procedure = os.path.basename(default_path)
+            self.current_procedure_label.configure(
+                text=f"Current Procedure: {self.current_procedure}"
+            )
+
+            self._build_steps(procedure)
+
+        except Exception as e:
+            self.logger.error(f"Failed to load default procedure: {e}")
