@@ -400,14 +400,14 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         frame.pack(fill="x", padx=5, pady=2)
 
         # Marker ID
-        id_label = ctk.CTkLabel(frame, text=f"ID: {marker_id}", font=("Arial", 12, "bold"), text_color = "#FFFFFF")
-        id_label.pack(anchor="w", padx=5, pady=2)
+        id_label = ctk.CTkLabel(frame, text=f"ID: {marker_id}", font=("Arial", 15, "bold"), text_color = "#FFFFFF")
+        id_label.pack(side = "left", padx=5, pady=2)
 
         # Position data
         abs_pos = data['absolute_position']
         pos_text = f"X: {abs_pos['x']:.2f}mm  Y: {abs_pos['y']:.2f}mm  Z: {abs_pos['z']:.2f}mm"
-        pos_label = ctk.CTkLabel(frame, text=pos_text, font=("Courier", 10), text_color = "#FFFFFF")
-        pos_label.pack(anchor="w", padx=5, pady=2)
+        pos_label = ctk.CTkLabel(frame, text=pos_text, font=("Courier", 15), text_color = "#FFFFFF")
+        pos_label.pack(side = "left", padx=5, pady=2)
 
         # Delete button
         delete_btn = ctk.CTkButton(
@@ -419,7 +419,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             width=60,
             height=25
         )
-        delete_btn.pack(anchor="e", padx=5, pady=5)
+        delete_btn.pack(side = "right", padx=5, pady=5)
     
     def _update_ui(self):
         """Update the UI displays"""
