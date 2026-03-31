@@ -83,16 +83,16 @@ class CameraFrame(ctk.CTkFrame):
         """Connect to camera through dispatcher (which notifies all observers)"""
         if self.dispatcher is not None:
             self.dispatcher.connect_camera()
+            # Start video feed after connection
+            self.update_video_feed()
         else:
             # Fallback for standalone mode
             self.update_video_feed()
     
     def _on_camera_connection_changed(self, is_connected: bool):
-        """Callback when camera connection state changes"""
+        """Callback when camera connection state changes (updates button state only)"""
         if is_connected:
             self.openCameraButton.configure(text="Camera Connected", state="disabled")
-            # Start video feed when connected
-            self.update_video_feed()
         else:
             self.openCameraButton.configure(text="Connect Camera", state="normal")
     

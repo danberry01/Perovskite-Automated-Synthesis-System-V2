@@ -4,6 +4,8 @@ import logging
 from typing import Dict, List, Tuple
 import json
 import os
+import cv2
+from PIL import Image
 
 from ...components.constants import *
 from drivers.controlboard_driver import ControlBoard
@@ -19,8 +21,11 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.dispatcher = dispatcher
         self.control_board: ControlBoard = dispatcher.control_board
         
-        # Use shared ArUco detector from dispatcher
+        # Use shared ArUco detector and video capture from dispatcher
         self.aruco_detector = dispatcher.aruco_detector
+        self.myVideoCapture = dispatcher.video_capture
+        self.width = dispatcher.camera_width
+        self.height = dispatcher.camera_height
         
         # Calibration data storage
         self.calibration_data: Dict[int, Dict] = {}  # marker_id -> {'positions': [...], 'absolute_pos': {...}}
@@ -31,6 +36,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self._is_paused = False
         self._calibration_in_progress = False
         self._verification_results: List[Tuple[float, float, float]] = []
+        self._video_feed_after_id = None
         
         # Setup UI
         self._setup_ui()
@@ -210,6 +216,64 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         )
         self.clear_all_button.grid(row=1, column=0, columnspan=2, sticky="ew", padx=2, pady=5)
     
+    def _update_camera_display(self):
+        """Update the camera display with the latest frame from shared video capture"""
+        if self._is_paused:
+            self._video_feed_after_id = self.camera_display.after(20, self._update_camera_display)
+            return
+        
+        # Read frame from shared video capture
+        ret, frame = self.myVideoCapture.read()
+        if not ret:
+            self._video_feed_after_id = self.camera_display.after(10, self._update_camera_display)
+            return
+        
+        # Process frame with shared ArUco detector
+        result = self.aruco_detector.detect_markers(frame)
+        frame = result['frame']
+        
+        # Log detection results
+        if result['count'] > 0:
+            self.logger.debug(f"Detected {result['count']} markers")
+        
+        # Convert for Tkinter display
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        captured_image = Image.fromarray(frame_rgb)
+        
+        ctk_image = ctk.CTkImage(
+            light_image=captured_image,
+            dark_image=captured_image,
+            size=(self.width, self.height)
+        )
+        
+        # Update display
+        self.camera_display.configure(image=ctk_image)
+        self.camera_display.image = ctk_image
+        
+        # Schedule next update
+        self._video_feed_after_id = self.camera_display.after(20, self._update_camera_display)
+    
+    def _start_camera_display(self):
+        """Start the camera display update loop"""
+        self._is_paused = False
+        if self._video_feed_after_id is None:
+            self._update_camera_display()
+    
+    def _stop_camera_display(self):
+        """Stop the camera display update loop"""
+        self._is_paused = True
+        if self._video_feed_after_id is not None:
+            self.camera_display.after_cancel(self._video_feed_after_id)
+            self._video_feed_after_id = None
+    
+    def pause_updates(self):
+        """Pause camera display when frame is hidden"""
+        self._stop_camera_display()
+    
+    def resume_updates(self):
+        """Resume camera display when frame becomes visible"""
+        self._start_camera_display()
+    
     def _start_calibration_scan(self):
         """Start the calibration scanning process in a background thread"""
         if self._calibration_in_progress:
@@ -219,6 +283,9 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.scan_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         self._calibration_in_progress = True
+        
+        # Start displaying camera feed
+        self._start_camera_display()
         
         # Run calibration in background thread
         calibration_thread = threading.Thread(target=self._calibration_worker, daemon=True)
@@ -230,13 +297,11 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             self._update_status("Scanning for markers...")
             
             # Wait for camera to capture frames
-            import cv2
             import time
             import numpy as np
             
-            cap = cv2.VideoCapture(0)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 600)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 400)
+            # Use shared video capture from dispatcher instead of creating a new one
+            cap = self.myVideoCapture
             
             # Scan for markers (collect frames over 2 seconds)
             start_time = time.time()
@@ -254,8 +319,6 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     if marker_id not in detected_markers:
                         detected_markers[marker_id] = []
                     detected_markers[marker_id].append(marker['position'])
-            
-            cap.release()
             
             if not detected_markers:
                 self._update_status("No markers detected!")
@@ -324,8 +387,6 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             if marker['id'] == marker_id:
                                 self._verification_results.append(marker['position'])
                     
-                    cap.release()
-                
                 # Check if results are consistent (3/4 same = at least 2 detections out of 3 attempts)
                 if len(self._verification_results) < 2:
                     self._update_status(f"Failed to verify Marker {marker_id} - retrying...")
@@ -383,6 +444,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self._calibration_in_progress = False
         self.scan_button.configure(state="normal")
         self.cancel_button.configure(state="disabled")
+        # Stop displaying camera feed
+        self._stop_camera_display()
     
     def _save_selected_position(self):
         """Save a selected calibrated position"""
