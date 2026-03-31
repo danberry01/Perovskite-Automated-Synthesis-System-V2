@@ -1,13 +1,3 @@
-"""
-ArUco Marker Calibration Frame
-
-Allows calibration of ArUco marker absolute positions through:
-- Scanning markers at known gantry positions
-- Calculating absolute coordinates
-- Verifying position accuracy through multiple returns
-- Storing calibrated positions
-"""
-
 import customtkinter as ctk
 import threading
 import logging
@@ -16,8 +6,8 @@ import json
 import os
 
 from ...components.constants import *
-from ...drivers.aruco_detector_driver import ArucoDetector
-from ...drivers.controlboard_driver import ControlBoard
+from drivers.aruco_detector_driver import ArucoDetector
+from drivers.controlboard_driver import ControlBoard
 
 
 class ArucoCalibrationFrame(ctk.CTkFrame):
