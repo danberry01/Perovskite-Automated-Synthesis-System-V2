@@ -54,27 +54,27 @@ class ArucoCalibrationSidePanel(ctk.CTkFrame):
         )
         self.refresh_position_button.grid(row=1, column=1, sticky="ew", padx=2, pady=5)
 
-        markers_label = ctk.CTkLabel(self, text="Detected Markers", font=("Arial", 30, "bold"))
+        markers_label = ctk.CTkLabel(self, text="Detected Markers", font=("Arial", 25, "bold"))
         markers_label.grid(row=2, column=0, sticky="nsew", padx=5, pady=(10, 5))
 
         self.markers_display = ctk.CTkTextbox(
             self,
             width=280,
             height=150,
-            font=("Courier", 9),
+            font=("Courier", 20),
             state="disabled",
             text_color=PLAIN_TEXT_COLOR
         )
         self.markers_display.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
 
-        positions_label = ctk.CTkLabel(self, text="Calibrated Positions", font=("Arial", 30, "bold"))
+        positions_label = ctk.CTkLabel(self, text="Calibrated Positions", font=("Arial",25, "bold"))
         positions_label.grid(row=4, column=0, sticky="nsew", padx=5, pady=(10, 5))
 
         self.positions_listbox = ctk.CTkTextbox(
             self,
             width=280,
             height=150,
-            font=("Courier", 9),
+            font=("Courier", 20),
             state="disabled",
             text_color=PLAIN_TEXT_COLOR
         )
