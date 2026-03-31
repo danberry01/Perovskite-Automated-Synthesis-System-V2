@@ -406,7 +406,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         # Position data
         abs_pos = data['absolute_position']
         pos_text = f"X: {abs_pos['x']:.2f}mm  Y: {abs_pos['y']:.2f}mm  Z: {abs_pos['z']:.2f}mm"
-        pos_label = ctk.CTkLabel(frame, text=pos_text, font=("Courier", 15), text_color = "#FFFFFF")
+        pos_label = ctk.CTkLabel(frame, text=pos_text, font=("Arial", 15), text_color = "#4BD5ED")
         pos_label.pack(side = "left", padx=5, pady=2)
 
         # Delete button
