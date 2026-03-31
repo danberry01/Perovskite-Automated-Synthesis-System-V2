@@ -354,6 +354,15 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
 
         self._update_status(f"Marker ID {marker_id} not found in pending or saved calibrations")
     
+    def _clear_pending_calibrations(self):
+        """Clear all pending calibrations"""
+        if self.pending_calibrations:
+            self.pending_calibrations.clear()
+            self._update_ui()
+            self._update_status("Cleared all pending calibrations")
+        else:
+            self._update_status("No pending calibrations to clear")
+    
     def _clear_all_calibrations(self):
         """Clear all calibrated positions"""
         self.calibration_data.clear()
@@ -367,49 +376,93 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.status_label.configure(text=status)
         self.logger.debug(f"[Calibration] {status}")
     
+    def _delete_marker(self, marker_id: int, is_pending: bool):
+        """Delete a specific marker calibration"""
+        if is_pending:
+            if marker_id in self.pending_calibrations:
+                del self.pending_calibrations[marker_id]
+                self._update_ui()
+                self._update_status(f"Deleted pending calibration for Marker {marker_id}")
+            else:
+                self._update_status(f"Marker ID {marker_id} not found in pending calibrations")
+        else:
+            if marker_id in self.calibration_data:
+                del self.calibration_data[marker_id]
+                self._save_calibration_data()
+                self._update_ui()
+                self._update_status(f"Deleted saved calibration for Marker {marker_id}")
+            else:
+                self._update_status(f"Marker ID {marker_id} not found in saved calibrations")
+    
+    def _create_marker_frame(self, marker_id: int, data: dict, is_pending: bool):
+        """Create a frame for a single marker in the scrollable list"""
+        frame = ctk.CTkFrame(self.positions_listbox, fg_color="#2B2B2B" if is_pending else "#1F1F1F")
+        frame.pack(fill="x", padx=5, pady=2)
+
+        # Marker ID
+        id_label = ctk.CTkLabel(frame, text=f"ID: {marker_id}", font=("Arial", 12, "bold"))
+        id_label.pack(anchor="w", padx=5, pady=2)
+
+        # Position data
+        abs_pos = data['absolute_position']
+        pos_text = f"X: {abs_pos['x']:.2f}mm  Y: {abs_pos['y']:.2f}mm  Z: {abs_pos['z']:.2f}mm"
+        pos_label = ctk.CTkLabel(frame, text=pos_text, font=("Courier", 10))
+        pos_label.pack(anchor="w", padx=5, pady=2)
+
+        # Delete button
+        delete_btn = ctk.CTkButton(
+            frame,
+            text="Delete",
+            command=lambda: self._delete_marker(marker_id, is_pending),
+            fg_color="#C62828",
+            hover_color="#880E4F",
+            width=60,
+            height=25
+        )
+        delete_btn.pack(anchor="e", padx=5, pady=5)
+    
     def _update_ui(self):
         """Update the UI displays"""
         # Update detected markers display (pending calibrations)
-        self.markers_display.configure(state="normal")
-        self.markers_display.delete("1.0", "end")
-
         if self.pending_calibrations:
-            self.markers_display.insert("end", "Pending (Newly Calibrated) Markers:\n")
+            text = "Pending (Newly Calibrated) Markers:\n"
             for marker_id, data in self.pending_calibrations.items():
                 abs_pos = data['absolute_position']
-                self.markers_display.insert("end", f"Marker ID {marker_id}: X={abs_pos['x']:.2f}, Y={abs_pos['y']:.2f}, Z={abs_pos['z']:.2f}\n")
+                text += f"Marker ID {marker_id}: X={abs_pos['x']:.2f}, Y={abs_pos['y']:.2f}, Z={abs_pos['z']:.2f}\n"
         else:
-            self.markers_display.insert("end", "No newly calibrated markers. Start a scan to detect markers.\n")
+            text = "No newly calibrated markers. Start a scan to detect markers."
+        self.markers_display.configure(text=text)
 
-        self.markers_display.configure(state="disabled")
+        # Clear the scrollable frame
+        for widget in self.positions_listbox.winfo_children():
+            widget.destroy()
 
-        # Update calibrated positions list (saved + pending)
-        self.positions_listbox.configure(state="normal")
-        self.positions_listbox.delete("1.0", "end")
-
+        # Add saved calibrations
         if self.calibration_data:
-            self.positions_listbox.insert("end", "Saved (Permanent) Calibrations:\n")
-            for marker_id, data in self.calibration_data.items():
-                abs_pos = data['absolute_position']
-                self.positions_listbox.insert("end", f"Marker ID: {marker_id}\n  X: {abs_pos['x']:.2f}mm\n  Y: {abs_pos['y']:.2f}mm\n  Z: {abs_pos['z']:.2f}mm\n\n")
+            saved_label = ctk.CTkLabel(self.positions_listbox, text="Saved (Permanent) Calibrations", font=("Arial", 14, "bold"))
+            saved_label.pack(pady=(0, 5))
 
+            for marker_id, data in self.calibration_data.items():
+                self._create_marker_frame(marker_id, data, is_pending=False)
+
+        # Add pending calibrations
         if self.pending_calibrations:
-            self.positions_listbox.insert("end", "Pending (Unsaved) Calibrations:\n")
+            pending_label = ctk.CTkLabel(self.positions_listbox, text="Pending (Unsaved) Calibrations", font=("Arial", 14, "bold"))
+            pending_label.pack(pady=(10, 5) if self.calibration_data else (0, 5))
+
             for marker_id, data in self.pending_calibrations.items():
-                abs_pos = data['absolute_position']
-                self.positions_listbox.insert("end", f"Marker ID: {marker_id} (pending)\n  X: {abs_pos['x']:.2f}mm\n  Y: {abs_pos['y']:.2f}mm\n  Z: {abs_pos['z']:.2f}mm\n\n")
+                self._create_marker_frame(marker_id, data, is_pending=True)
 
         if not self.calibration_data and not self.pending_calibrations:
-            self.positions_listbox.insert("end", "No saved or pending calibrations yet.\n")
-
-        self.positions_listbox.configure(state="disabled")
+            no_data_label = ctk.CTkLabel(self.positions_listbox, text="No saved or pending calibrations yet.")
+            no_data_label.pack(pady=10)
 
         # Enable/disable management buttons
         has_pending = len(self.pending_calibrations) > 0
         has_any = has_pending or len(self.calibration_data) > 0
 
         self.save_button.configure(state="normal" if has_pending else "disabled")
-        self.delete_button.configure(state="normal" if has_any else "disabled")
+        self.delete_button.configure(state="normal" if has_pending else "disabled")
     
     def _load_calibration_data(self):
         """Load calibration data from file"""

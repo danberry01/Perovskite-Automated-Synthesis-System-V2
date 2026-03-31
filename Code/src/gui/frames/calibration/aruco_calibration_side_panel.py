@@ -57,26 +57,22 @@ class ArucoCalibrationSidePanel(ctk.CTkFrame):
         markers_label = ctk.CTkLabel(self, text="Detected Markers", font=("Arial", 25, "bold"))
         markers_label.grid(row=2, column=0, sticky="nsew", padx=5, pady=(10, 5))
 
-        self.markers_display = ctk.CTkTextbox(
+        self.markers_display = ctk.CTkLabel(
             self,
-            width=280,
-            height=150,
+            text="No newly calibrated markers. Start a scan to detect markers.",
             font=("Courier", 20),
-            state="disabled",
-            text_color=PLAIN_TEXT_COLOR
+            text_color=PLAIN_TEXT_COLOR,
+            wraplength=280
         )
         self.markers_display.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
 
         positions_label = ctk.CTkLabel(self, text="Calibrated Positions", font=("Arial",25, "bold"))
         positions_label.grid(row=4, column=0, sticky="nsew", padx=5, pady=(10, 5))
 
-        self.positions_listbox = ctk.CTkTextbox(
+        self.positions_listbox = ctk.CTkScrollableFrame(
             self,
             width=280,
-            height=150,
-            font=("Courier", 20),
-            state="disabled",
-            text_color=PLAIN_TEXT_COLOR
+            height=200
         )
         self.positions_listbox.grid(row=5, column=0, sticky="nsew", padx=5, pady=5)
 
@@ -97,8 +93,8 @@ class ArucoCalibrationSidePanel(ctk.CTkFrame):
 
         self.delete_button = ctk.CTkButton(
             management_frame,
-            text="Delete Selected",
-            command=self.controller._delete_selected_position,
+            text="Clear Pending",
+            command=self.controller._clear_pending_calibrations,
             fg_color="#000000",
             hover_color=FOREGROUND_COLOR_TWO,
             state="disabled"
