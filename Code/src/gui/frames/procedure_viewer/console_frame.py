@@ -14,6 +14,7 @@ class ConsoleFrame(ctk.CTkFrame):
         # Update loop tracking  
         self._update_after_id = None
         self._is_paused = False
+        self.current_filter = "DEBUG"  # Filter level for console display
         
         self.logger = logging.getLogger("Main Logger")
         self.log_queue = Queue()
@@ -41,7 +42,7 @@ class ConsoleFrame(ctk.CTkFrame):
         # logging level selector
         self.log_level = ctk.CTkOptionMenu(
             master=self,
-            values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "CAMERA"],
             width=100,
             fg_color = PLAIN_TEXT_COLOR,
             button_color = PLAIN_TEXT_COLOR,
@@ -61,6 +62,7 @@ class ConsoleFrame(ctk.CTkFrame):
         self.console.tag_config("DEBUG", foreground="#8df564")
         self.console.tag_config("WARNING", foreground="#e4f089")
         self.console.tag_config("ERROR", foreground="red")
+        self.console.tag_config("CAMERA", foreground="#00bfff")  # Deep sky blue for camera/marker updates
         
         self._update()
     
@@ -74,7 +76,11 @@ class ConsoleFrame(ctk.CTkFrame):
         if not self._is_paused:
             while not self.log_queue.empty():
                 msg = self.log_queue.get()
-                self.write_to_console(msg)
+                
+                # Filter messages based on current filter level
+                if self._should_display_message(msg):
+                    self.write_to_console(msg)
+                
                 self.log_queue.task_done()
                 self.console.see("end")
         
@@ -87,6 +93,22 @@ class ConsoleFrame(ctk.CTkFrame):
     def resume_update(self):
         """Resume console updates"""
         self._is_paused = False
+    
+    def _should_display_message(self, msg: str) -> bool:
+        """Determine if a message should be displayed based on current filter level"""
+        # Extract the log level prefix from the message
+        prefix = msg.split("\t")[0] if "\t" in msg else msg.split(" ")[0]
+        
+        # CAMERA filter: only show CAMERA level messages
+        if self.current_filter == "CAMERA":
+            return prefix == "CAMERA"
+        
+        # Standard filters: show messages at or above the threshold
+        level_hierarchy = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4, "CAMERA": -1}
+        current_level = level_hierarchy.get(self.current_filter, 0)
+        message_level = level_hierarchy.get(prefix, 0)
+        
+        return message_level >= current_level
 
     def write_to_console(self, text: str):
         """ Write a message to the console
@@ -108,8 +130,12 @@ class ConsoleFrame(ctk.CTkFrame):
         ### Args:
             level (str): logging level to set
         """
-        self.logger.setLevel(level)
-        self.logger.debug(f"Logging level set to {level}")
+        self.current_filter = level
+        
+        # Always set logger to DEBUG so we capture everything, then filter on display
+        self.logger.setLevel(logging.DEBUG)
+        
+        self.logger.debug(f"Console filter set to {level}")
 
     
 class ConsoleLogHandler(logging.StreamHandler):

@@ -43,6 +43,10 @@ if __name__ == "__main__":
     # Device.pin_factory = PiGPIOFactory()
     
     # -- LOGGING --
+    # Add custom CAMERA logging level for camera/marker updates
+    CAMERA_LEVEL = logging.DEBUG - 1
+    logging.addLevelName(CAMERA_LEVEL, "CAMERA")
+    
     logger = logging.getLogger("Main Logger")
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter('%(levelname)s\t%(asctime)s: %(message)s'))

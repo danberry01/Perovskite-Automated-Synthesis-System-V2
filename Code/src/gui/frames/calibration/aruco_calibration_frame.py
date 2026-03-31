@@ -204,57 +204,139 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         break
 
                     self._verification_results = []
+                    frame_read_failures = 0
+                    gantry_position_errors = 0
+                    
                     for attempt in range(3):
                         if self._cancel_requested:
                             break
 
                         self._update_status(f"Verification {attempt + 1}/3 for Marker {marker_id}...")
                         self.logger.debug(f"Homing gantry for verification attempt {attempt + 1}")
-                        self.control_board.send_message("G28")
-                        self.control_board.finish_moves()
+                        
+                        # Home gantry with error checking
+                        try:
+                            self.control_board.send_message("G28")
+                            self.control_board.finish_moves()
+                        except Exception as e:
+                            error_msg = f"ERROR: Failed to home gantry for Marker {marker_id}: {e}"
+                            self.logger.error(error_msg)
+                            self._update_status(error_msg)
+                            gantry_position_errors += 1
+                            continue
+                        
                         time.sleep(0.5)
 
-                        self.logger.debug(f"Moving to calibrated position: X={abs_pos['x']:.2f} Y={abs_pos['y']:.2f} Z={abs_pos['z']:.2f}")
-                        self.control_board.move_axis('X', abs_pos['x'], feedrate_mm_per_minute=2000)
-                        self.control_board.move_axis('Y', abs_pos['y'], feedrate_mm_per_minute=2000)
-                        self.control_board.move_axis('Z', abs_pos['z'], feedrate_mm_per_minute=600)
+                        # Move to calibrated position with validation
+                        self.logger.debug(f"Moving to Marker {marker_id} position: X={abs_pos['x']:.2f}mm Y={abs_pos['y']:.2f}mm Z={abs_pos['z']:.2f}mm")
+                        try:
+                            self.control_board.move_axis('X', abs_pos['x'], feedrate_mm_per_minute=2000)
+                            self.control_board.move_axis('Y', abs_pos['y'], feedrate_mm_per_minute=2000)
+                            self.control_board.move_axis('Z', abs_pos['z'], feedrate_mm_per_minute=600)
+                        except Exception as e:
+                            error_msg = f"ERROR: Failed to move to calibrated position for Marker {marker_id}: {e}"
+                            self.logger.error(error_msg)
+                            self._update_status(error_msg)
+                            gantry_position_errors += 1
+                            continue
 
                         time.sleep(0.5)
+                        
+                        # Validate gantry actually moved (check reported position)
+                        try:
+                            current_pos = self.control_board.positions.copy()
+                            x_error = abs(current_pos['X'] - abs_pos['x'])
+                            y_error = abs(current_pos['Y'] - abs_pos['y'])
+                            z_error = abs(current_pos['Z'] - abs_pos['z'])
+                            
+                            # Position tolerance: 5mm
+                            if x_error > 5 or y_error > 5 or z_error > 5:
+                                error_msg = f"WARNING: Gantry position error for Marker {marker_id}: Expected (X={abs_pos['x']:.1f}, Y={abs_pos['y']:.1f}, Z={abs_pos['z']:.1f}), Got (X={current_pos['X']:.1f}, Y={current_pos['Y']:.1f}, Z={current_pos['Z']:.1f})"
+                                self.logger.warning(error_msg)
+                                self._update_status(error_msg)
+                                gantry_position_errors += 1
+                                continue
+                        except Exception as e:
+                            error_msg = f"ERROR: Could not validate gantry position for Marker {marker_id}: {e}"
+                            self.logger.error(error_msg)
+                            gantry_position_errors += 1
+                            continue
 
+                        # Scan for marker
                         scan_start = time.time()
+                        attempt_detections = []
+                        failed_reads = 0
+                        
                         while time.time() - scan_start < 1.0 and not self._cancel_requested:
                             ret, frame = cap.read()
                             if not ret:
+                                failed_reads += 1
                                 continue
 
                             result = self.aruco_detector.detect_markers(frame)
                             for marker in result['markers']:
                                 if marker['id'] == marker_id:
+                                    attempt_detections.append(marker['position'])
                                     self._verification_results.append(marker['position'])
+                        
+                        if failed_reads > 20:
+                            error_msg = f"WARNING: High camera read failure rate ({failed_reads}) during verification of Marker {marker_id}"
+                            self.logger.warning(error_msg)
+                            self._update_status(error_msg)
+                            frame_read_failures += 1
+                        
+                        if not attempt_detections:
+                            self.logger.warning(f"Marker {marker_id} not detected in attempt {attempt + 1}/3")
 
                     if self._cancel_requested:
                         break
 
+                    # Comprehensive error reporting
+                    if gantry_position_errors > 2:
+                        error_msg = f"ERROR: Gantry position errors (3/3 attempts failed) for Marker {marker_id} - possible mechanical issue or incorrect calibration"
+                        self.logger.error(error_msg)
+                        self._update_status(error_msg)
+                        continue
+                    
+                    if frame_read_failures > 2:
+                        error_msg = f"WARNING: Camera frame read issues detected for Marker {marker_id} - multiple attempts had read failures"
+                        self.logger.warning(error_msg)
+                        self._update_status(error_msg)
+
                     if len(self._verification_results) < 2:
-                        self._update_status(f"Failed to verify Marker {marker_id}. Will retry full scan.")
-                        self.logger.warning(f"Verification failed for Marker {marker_id}: {len(self._verification_results)} hits")
+                        error_msg = f"FAILED: Marker {marker_id} verification unsuccessful - only {len(self._verification_results)} detection(s) out of 3 attempts. Possible issues: (1) Marker not in field of view, (2) Incorrect position calculation, (3) Camera/marker detection issue"
+                        self.logger.warning(error_msg)
+                        self._update_status(error_msg)
                         continue
 
+                    # Calculate average with variance check
                     avg_result = {
                         'x': sum(p['x'] for p in self._verification_results) / len(self._verification_results),
                         'y': sum(p['y'] for p in self._verification_results) / len(self._verification_results),
                         'z': sum(p['z'] for p in self._verification_results) / len(self._verification_results)
                     }
+                    
+                    # Check variance of results
+                    x_variance = max([abs(p['x'] - avg_result['x']) for p in self._verification_results])
+                    y_variance = max([abs(p['y'] - avg_result['y']) for p in self._verification_results])
+                    z_variance = max([abs(p['z'] - avg_result['z']) for p in self._verification_results])
+                    
+                    # Variance tolerance: 0.05m (50mm)
+                    if x_variance > 0.05 or y_variance > 0.05 or z_variance > 0.05:
+                        error_msg = f"WARNING: Marker {marker_id} detection variance too high - X var: {x_variance*1000:.1f}mm, Y var: {y_variance*1000:.1f}mm, Z var: {z_variance*1000:.1f}mm. Calibration may be unreliable."
+                        self.logger.warning(error_msg)
+                        self._update_status(error_msg)
 
                     verified_results[marker_id] = {
                         'relative_positions': [marker_positions[marker_id]],
                         'absolute_position': abs_pos,
                         'verification_count': len(self._verification_results),
                         'gantry_reference': gantry_pos,
-                        'verification_average': avg_result
+                        'verification_average': avg_result,
+                        'detection_variance': {'x': x_variance, 'y': y_variance, 'z': z_variance}
                     }
 
-                    self.logger.info(f"Marker {marker_id} calibration verified: {abs_pos}")
+                    self.logger.info(f"Marker {marker_id} calibration verified: {len(self._verification_results)} detections, variance: X={x_variance*1000:.1f}mm Y={y_variance*1000:.1f}mm Z={z_variance*1000:.1f}mm")
 
                 if self._cancel_requested:
                     break

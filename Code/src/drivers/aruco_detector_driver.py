@@ -242,18 +242,23 @@ class ArucoDetector:
     
     def log_detection_results(self, result: dict):
         """
-        Log marker detection results to logger.
+        Log marker detection results to logger at CAMERA level.
+        Uses a custom CAMERA level to keep verbose camera updates out of normal logging.
         
         Args:
             result: Result dict from detect_markers()
         """
+        # CAMERA level is DEBUG - 1 (defined in main.py)
+        CAMERA_LEVEL = logging.DEBUG - 1
+        
         if result['count'] == 0:
-            self.logger.debug("No markers detected")
+            self.logger.log(CAMERA_LEVEL, "No markers detected")
         else:
-            self.logger.debug(f"Detected {result['count']} marker(s)")
+            self.logger.log(CAMERA_LEVEL, f"Detected {result['count']} marker(s)")
             for marker in result['markers']:
                 pos = marker['position']
-                self.logger.debug(
+                self.logger.log(
+                    CAMERA_LEVEL,
                     f"  Marker {marker['id']}: X={pos['x']:.3f}m, "
                     f"Y={pos['y']:.3f}m, Z={pos['z']:.3f}m"
                 )
