@@ -28,13 +28,15 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.height = dispatcher.camera_height
         
         # Calibration data storage
-        self.calibration_data: Dict[int, Dict] = {}  # marker_id -> {'positions': [...], 'absolute_pos': {...}}
+        self.calibration_data: Dict[int, Dict] = {}  # saved/permanent calibrations
+        self.pending_calibrations: Dict[int, Dict] = {}  # newly scanned calibrations not yet saved
         self.calibration_file = "calibration_data/aruco_calibrations.json"
         self._load_calibration_data()
         
         # State tracking
         self._is_paused = False
         self._calibration_in_progress = False
+        self._cancel_requested = False
         self._verification_results: List[Tuple[float, float, float]] = []
         self._video_feed_after_id = None
         
@@ -285,6 +287,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.scan_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         self._calibration_in_progress = True
+        self._cancel_requested = False
         
         # Start displaying camera feed
         self._start_camera_display()
@@ -295,126 +298,138 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
     
     def _calibration_worker(self):
         """Background worker for calibration process"""
+        import time
+
         try:
-            self._update_status("Scanning for markers...")
-            
-            # Wait for camera to capture frames
-            import time
-            import numpy as np
-            
-            # Use shared video capture from dispatcher instead of creating a new one
             cap = self.myVideoCapture
-            
-            # Scan for markers (collect frames over 2 seconds)
-            start_time = time.time()
-            detected_markers = {}
-            
-            while time.time() - start_time < 2.0:
-                ret, frame = cap.read()
-                if not ret:
-                    continue
-                
-                result = self.aruco_detector.detect_markers(frame)
-                
-                for marker in result['markers']:
-                    marker_id = marker['id']
-                    if marker_id not in detected_markers:
-                        detected_markers[marker_id] = []
-                    detected_markers[marker_id].append(marker['position'])
-            
-            if not detected_markers:
-                self._update_status("No markers detected!")
-                self.logger.warning("No ArUco markers detected during calibration")
-                self._reset_calibration()
-                return
-            
-            # Average the detections for each marker
-            marker_positions = {}
-            for marker_id, positions in detected_markers.items():
-                if positions:
-                    avg_x = sum(p['x'] for p in positions) / len(positions)
-                    avg_y = sum(p['y'] for p in positions) / len(positions)
-                    avg_z = sum(p['z'] for p in positions) / len(positions)
-                    marker_positions[marker_id] = {'x': avg_x, 'y': avg_y, 'z': avg_z}
-            
-            # Get current gantry position
-            gantry_pos = self.control_board.positions.copy()
-            
-            # Calculate absolute positions (relative marker pos + gantry pos)
-            absolute_positions = {}
-            for marker_id, rel_pos in marker_positions.items():
-                abs_pos = {
-                    'x': gantry_pos['X'] + rel_pos['x'] * 1000,  # Convert to mm
-                    'y': gantry_pos['Y'] + rel_pos['y'] * 1000,
-                    'z': gantry_pos['Z'] + rel_pos['z'] * 1000
-                }
-                absolute_positions[marker_id] = abs_pos
-            
-            # Verify position accuracy by moving to the detected position 3 times
-            self._update_status("Verifying calibration...")
-            
-            for marker_id, abs_pos in absolute_positions.items():
-                self._verification_results = []
-                
-                for attempt in range(3):
-                    self._update_status(f"Verification {attempt + 1}/3 for Marker {marker_id}...")
-                    
-                    # Home the gantry first
-                    self.logger.debug(f"Homing gantry for verification attempt {attempt + 1}")
-                    self.control_board.send_message("G28")  # Home command
-                    self.control_board.finish_moves()
-                    time.sleep(0.5)
-                    
-                    # Move to the detected position
-                    self.logger.debug(f"Moving to calibrated position: X={abs_pos['x']:.2f} Y={abs_pos['y']:.2f} Z={abs_pos['z']:.2f}")
-                    self.control_board.move_axis('X', abs_pos['x'], feedrate_mm_per_minute=2000)
-                    self.control_board.move_axis('Y', abs_pos['y'], feedrate_mm_per_minute=2000)
-                    self.control_board.move_axis('Z', abs_pos['z'], feedrate_mm_per_minute=600)
-                    
-                    time.sleep(0.5)
-                    
-                    # Scan for markers at this position
-                    cap = cv2.VideoCapture(0)
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 600)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 400)
-                    
-                    scan_start = time.time()
-                    while time.time() - scan_start < 1.0:
-                        ret, frame = cap.read()
-                        if not ret:
-                            continue
-                        
-                        result = self.aruco_detector.detect_markers(frame)
+
+            while not self._cancel_requested:
+                self._update_status("Scanning for markers...")
+
+                start_time = time.time()
+                detected_markers = {}
+
+                while time.time() - start_time < 2.0 and not self._cancel_requested:
+                    ret, frame = cap.read()
+                    if not ret:
+                        continue
+
+                    result = self.aruco_detector.detect_markers(frame)
+                    if result['count'] > 0:
                         for marker in result['markers']:
-                            if marker['id'] == marker_id:
-                                self._verification_results.append(marker['position'])
-                    
-                # Check if results are consistent (3/4 same = at least 2 detections out of 3 attempts)
-                if len(self._verification_results) < 2:
-                    self._update_status(f"Failed to verify Marker {marker_id} - retrying...")
-                    # Keep trying until we get consistent results
+                            marker_id = marker['id']
+                            if marker_id not in detected_markers:
+                                detected_markers[marker_id] = []
+                            detected_markers[marker_id].append(marker['position'])
+
+                if self._cancel_requested:
+                    break
+
+                if not detected_markers:
+                    self._update_status("No markers detected. Retry in 1 sec or Cancel.")
+                    time.sleep(1.0)
                     continue
-                
-                # Calculate average of all verification results
-                avg_result = {
-                    'x': sum(p['x'] for p in self._verification_results) / len(self._verification_results),
-                    'y': sum(p['y'] for p in self._verification_results) / len(self._verification_results),
-                    'z': sum(p['z'] for p in self._verification_results) / len(self._verification_results)
-                }
-                
-                # Store the calibration
-                self.calibration_data[marker_id] = {
-                    'relative_positions': [marker_positions[marker_id]],
-                    'absolute_position': abs_pos,
-                    'verification_count': len(self._verification_results),
-                    'gantry_reference': gantry_pos
-                }
-                
-                self.logger.info(f"Calibrated Marker {marker_id} at absolute position: X={abs_pos['x']:.2f} Y={abs_pos['y']:.2f} Z={abs_pos['z']:.2f}")
-            
-            self._update_status("Calibration complete!")
-            self._update_ui()
-            
+
+                # Average the detections for each marker
+                marker_positions = {}
+                for marker_id, positions in detected_markers.items():
+                    if positions:
+                        marker_positions[marker_id] = {
+                            'x': sum(p['x'] for p in positions) / len(positions),
+                            'y': sum(p['y'] for p in positions) / len(positions),
+                            'z': sum(p['z'] for p in positions) / len(positions)
+                        }
+
+                # Get current gantry position
+                gantry_pos = self.control_board.positions.copy()
+
+                # Calculate absolute positions (relative marker pos + gantry pos)
+                absolute_positions = {}
+                for marker_id, rel_pos in marker_positions.items():
+                    absolute_positions[marker_id] = {
+                        'x': gantry_pos['X'] + rel_pos['x'] * 1000,
+                        'y': gantry_pos['Y'] + rel_pos['y'] * 1000,
+                        'z': gantry_pos['Z'] + rel_pos['z'] * 1000
+                    }
+
+                self._update_status("Verifying calibration...")
+
+                verified_results = {}
+
+                for marker_id, abs_pos in absolute_positions.items():
+                    if self._cancel_requested:
+                        break
+
+                    self._verification_results = []
+                    for attempt in range(3):
+                        if self._cancel_requested:
+                            break
+
+                        self._update_status(f"Verification {attempt + 1}/3 for Marker {marker_id}...")
+                        self.logger.debug(f"Homing gantry for verification attempt {attempt + 1}")
+                        self.control_board.send_message("G28")
+                        self.control_board.finish_moves()
+                        time.sleep(0.5)
+
+                        self.logger.debug(f"Moving to calibrated position: X={abs_pos['x']:.2f} Y={abs_pos['y']:.2f} Z={abs_pos['z']:.2f}")
+                        self.control_board.move_axis('X', abs_pos['x'], feedrate_mm_per_minute=2000)
+                        self.control_board.move_axis('Y', abs_pos['y'], feedrate_mm_per_minute=2000)
+                        self.control_board.move_axis('Z', abs_pos['z'], feedrate_mm_per_minute=600)
+
+                        time.sleep(0.5)
+
+                        scan_start = time.time()
+                        while time.time() - scan_start < 1.0 and not self._cancel_requested:
+                            ret, frame = cap.read()
+                            if not ret:
+                                continue
+
+                            result = self.aruco_detector.detect_markers(frame)
+                            for marker in result['markers']:
+                                if marker['id'] == marker_id:
+                                    self._verification_results.append(marker['position'])
+
+                    if self._cancel_requested:
+                        break
+
+                    if len(self._verification_results) < 2:
+                        self._update_status(f"Failed to verify Marker {marker_id}. Will retry full scan.")
+                        self.logger.warning(f"Verification failed for Marker {marker_id}: {len(self._verification_results)} hits")
+                        continue
+
+                    avg_result = {
+                        'x': sum(p['x'] for p in self._verification_results) / len(self._verification_results),
+                        'y': sum(p['y'] for p in self._verification_results) / len(self._verification_results),
+                        'z': sum(p['z'] for p in self._verification_results) / len(self._verification_results)
+                    }
+
+                    verified_results[marker_id] = {
+                        'relative_positions': [marker_positions[marker_id]],
+                        'absolute_position': abs_pos,
+                        'verification_count': len(self._verification_results),
+                        'gantry_reference': gantry_pos,
+                        'verification_average': avg_result
+                    }
+
+                    self.logger.info(f"Marker {marker_id} calibration verified: {abs_pos}")
+
+                if self._cancel_requested:
+                    break
+
+                if not verified_results:
+                    self._update_status("No verified markers, retrying scan.")
+                    time.sleep(1.0)
+                    continue
+
+                # Save to pending calibrations and update UI
+                self.pending_calibrations.update(verified_results)
+                self._update_status(f"Calibration complete: {len(verified_results)} marker(s) pending save.")
+                self._update_ui()
+                return
+
+            if self._cancel_requested:
+                self._update_status("Calibration cancelled by user")
+
         except Exception as e:
             self.logger.error(f"Calibration error: {e}")
             self._update_status(f"Error: {e}")
@@ -438,8 +453,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
     
     def _cancel_calibration(self):
         """Cancel ongoing calibration"""
-        self._reset_calibration()
-        self._update_status("Calibration cancelled")
+        self._cancel_requested = True
+        self._update_status("Calibration cancellation requested")
     
     def _reset_calibration(self):
         """Reset calibration UI state"""
@@ -450,30 +465,56 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self._stop_camera_display()
     
     def _save_selected_position(self):
-        """Save a selected calibrated position"""
-        # This will be implemented to save to file
+        """Save pending calibrated positions to permanent calibration file"""
+        if not self.pending_calibrations:
+            self._update_status("No pending calibrations to save")
+            return
+
+        for marker_id, data in self.pending_calibrations.items():
+            self.calibration_data[marker_id] = data
+
+        self.pending_calibrations.clear()
         self._save_calibration_data()
-        self._update_status("Calibration saved")
+        self._update_ui()
+        self._update_status("Pending calibrations saved permanently")
     
     def _delete_selected_position(self):
         """Delete a selected calibration"""
-        # Get selected text from listbox
-        selected = self.positions_listbox.selection_get()
-        if selected:
-            # Parse marker ID from selected text
-            try:
-                marker_id = int(selected.split("ID:")[1].split()[0])
-                if marker_id in self.calibration_data:
-                    del self.calibration_data[marker_id]
-                    self._save_calibration_data()
-                    self._update_ui()
-                    self._update_status(f"Deleted calibration for Marker {marker_id}")
-            except:
-                self.logger.warning("Could not parse marker ID from selection")
+        try:
+            selected = self.positions_listbox.selection_get()
+        except Exception:
+            selected = None
+
+        if not selected:
+            self._update_status("No selection available for deletion")
+            return
+
+        try:
+            marker_id = int(selected.split("ID:")[1].split()[0])
+        except Exception:
+            self.logger.warning("Could not parse marker ID from selection")
+            self._update_status("Failed to parse selected marker ID")
+            return
+
+        if marker_id in self.pending_calibrations:
+            del self.pending_calibrations[marker_id]
+            self._update_ui()
+            self._update_status(f"Deleted pending calibration for Marker {marker_id}")
+            return
+
+        if marker_id in self.calibration_data:
+            del self.calibration_data[marker_id]
+            self._save_calibration_data()
+            self._update_ui()
+            self._update_status(f"Deleted saved calibration for Marker {marker_id}")
+            return
+
+        self._update_status(f"Marker ID {marker_id} not found in pending or saved calibrations")
     
     def _clear_all_calibrations(self):
         """Clear all calibrated positions"""
         self.calibration_data.clear()
+        self.pending_calibrations.clear()
         self._save_calibration_data()
         self._update_ui()
         self._update_status("All calibrations cleared")
@@ -485,21 +526,47 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
     
     def _update_ui(self):
         """Update the UI displays"""
-        # Update calibrated positions list
+        # Update detected markers display (pending calibrations)
+        self.markers_display.configure(state="normal")
+        self.markers_display.delete("1.0", "end")
+
+        if self.pending_calibrations:
+            self.markers_display.insert("end", "Pending (Newly Calibrated) Markers:\n")
+            for marker_id, data in self.pending_calibrations.items():
+                abs_pos = data['absolute_position']
+                self.markers_display.insert("end", f"Marker ID {marker_id}: X={abs_pos['x']:.2f}, Y={abs_pos['y']:.2f}, Z={abs_pos['z']:.2f}\n")
+        else:
+            self.markers_display.insert("end", "No newly calibrated markers. Start a scan to detect markers.\n")
+
+        self.markers_display.configure(state="disabled")
+
+        # Update calibrated positions list (saved + pending)
         self.positions_listbox.configure(state="normal")
         self.positions_listbox.delete("1.0", "end")
-        
-        for marker_id, data in self.calibration_data.items():
-            abs_pos = data['absolute_position']
-            text = f"Marker ID: {marker_id}\n  X: {abs_pos['x']:.2f}mm\n  Y: {abs_pos['y']:.2f}mm\n  Z: {abs_pos['z']:.2f}mm\n\n"
-            self.positions_listbox.insert("end", text)
-        
+
+        if self.calibration_data:
+            self.positions_listbox.insert("end", "Saved (Permanent) Calibrations:\n")
+            for marker_id, data in self.calibration_data.items():
+                abs_pos = data['absolute_position']
+                self.positions_listbox.insert("end", f"Marker ID: {marker_id}\n  X: {abs_pos['x']:.2f}mm\n  Y: {abs_pos['y']:.2f}mm\n  Z: {abs_pos['z']:.2f}mm\n\n")
+
+        if self.pending_calibrations:
+            self.positions_listbox.insert("end", "Pending (Unsaved) Calibrations:\n")
+            for marker_id, data in self.pending_calibrations.items():
+                abs_pos = data['absolute_position']
+                self.positions_listbox.insert("end", f"Marker ID: {marker_id} (pending)\n  X: {abs_pos['x']:.2f}mm\n  Y: {abs_pos['y']:.2f}mm\n  Z: {abs_pos['z']:.2f}mm\n\n")
+
+        if not self.calibration_data and not self.pending_calibrations:
+            self.positions_listbox.insert("end", "No saved or pending calibrations yet.\n")
+
         self.positions_listbox.configure(state="disabled")
-        
+
         # Enable/disable management buttons
-        has_calibrations = len(self.calibration_data) > 0
-        self.save_button.configure(state="normal" if has_calibrations else "disabled")
-        self.delete_button.configure(state="normal" if has_calibrations else "disabled")
+        has_pending = len(self.pending_calibrations) > 0
+        has_any = has_pending or len(self.calibration_data) > 0
+
+        self.save_button.configure(state="normal" if has_pending else "disabled")
+        self.delete_button.configure(state="normal" if has_any else "disabled")
     
     def _load_calibration_data(self):
         """Load calibration data from file"""
