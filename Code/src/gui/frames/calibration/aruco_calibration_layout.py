@@ -7,8 +7,8 @@ class ArucoCalibrationLayout(ctk.CTkFrame):
     def __init__(self, master, controller):
         super().__init__(master, fg_color="transparent")
 
-        self.columnconfigure(0, weight=2)
-        self.columnconfigure(1, weight=1)
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1, minsize = 400)
         self.rowconfigure(0, weight=1)
 
         self.main_panel = ArucoCalibrationMainPanel(self, controller=controller)
