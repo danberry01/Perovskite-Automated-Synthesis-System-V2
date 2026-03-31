@@ -19,12 +19,16 @@ class ConnectionFrame(ctk.CTkFrame):
     def __init__(self, master, dispatcher):  # Add spectrometer parameter
         super().__init__(master=master,fg_color = FOREGROUND_COLOR,height=400,corner_radius=0 )
 
+        self.dispatcher = dispatcher
         self.control_board = dispatcher.control_board
         self.spin_coater = dispatcher.spin_coater
         self.hotplate = dispatcher.hotplate
         self.camera = dispatcher.camera
         self.spectrometer = dispatcher.spectrometer
         self.command_destination = "Control Board"
+        
+        # Register callback for camera connection state changes
+        self.dispatcher.register_camera_connection_callback(self._on_camera_connection_changed)
         
         # Title
         self.title_label = ctk.CTkLabel(
@@ -143,8 +147,11 @@ class ConnectionFrame(ctk.CTkFrame):
         self.spectrometer_connection.set_connection_status(True)
         
     def _connect_camera(self):
-        self.camera.connect()
-        self.camera_connection.set_connection_status(True)
+        self.dispatcher.connect_camera()
+        
+    def _on_camera_connection_changed(self, is_connected: bool):
+        """Callback when camera connection state changes (called from either button)"""
+        self.camera_connection.set_connection_status(is_connected)
         
     def _set_command_destination(self, value: str):
         self.command_destination = value
@@ -164,6 +171,11 @@ class ConnectionFrame(ctk.CTkFrame):
             self.spectrometer.send_message(value)
         elif self.command_destination == "Hotplate":
             self.hotplate.send_message(value)
+    
+    def destroy(self):
+        """Clean up callbacks when frame is destroyed"""
+        self.dispatcher.unregister_camera_connection_callback(self._on_camera_connection_changed)
+        super().destroy()
             
 class NameLater(ctk.CTkFrame):
     def __init__(self, master, image_path, command, default_port: int = 0):

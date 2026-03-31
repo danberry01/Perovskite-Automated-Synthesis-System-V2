@@ -33,8 +33,8 @@ class TabManagerFrame(ctk.CTkFrame):
         self.unselected_settings_image = self.path_to_ctk_image("gui/icons/unselected_settings.png")
         self.selected_settings_image = self.path_to_ctk_image("gui/icons/selected_settings.png")
 
-        self.unselected_calibration_image = self.path_to_ctk_image("gui/icons/unselected_settings.png")  # Reuse settings icon for now
-        self.selected_calibration_image = self.path_to_ctk_image("gui/icons/selected_settings.png")      # Reuse settings icon for now
+        self.unselected_calibration_image = self.path_to_ctk_image("gui/icons/unselected_calibration.png")  # Reuse settings icon for now
+        self.selected_calibration_image = self.path_to_ctk_image("gui/icons/selected_calibration.png")      # Reuse settings icon for now
 
         # File tab button
         self.file_tab_button = ctk.CTkButton(

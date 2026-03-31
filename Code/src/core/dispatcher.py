@@ -1,9 +1,12 @@
 
+import cv2
+
 from drivers.controlboard_driver import ControlBoard
 from drivers.spincoater_driver import SpinCoater
 from drivers.camera_driver import Camera
 from drivers.procedure_file_driver import ProcedureFile
 from drivers.spectrometer_driver import Spectrometer
+from drivers.aruco_detector_driver import ArucoDetector
 
 from objects.tip_matrix import TipMatrix
 from objects.vial_carousel import VialCarousel
@@ -25,6 +28,20 @@ class Dispatcher:
         self.spectrometer = Spectrometer()
         self.toolhead = Toolhead(self.control_board)
         
+        # Shared camera vision resources
+        self.camera_width = 600
+        self.camera_height = 400
+        self.video_capture = cv2.VideoCapture(0)
+        if self.video_capture.isOpened():
+            self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_width)
+            self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
+        
+        # Shared ArUco detector (created on demand to avoid re-initializing)
+        self._aruco_detector = None
+        
+        # Camera connection callbacks - for linking buttons
+        self._camera_connection_callbacks = []
+        
         # Pipette handler
         self.pipettes = [
             Pipette(200, 97, 17, 3, False),
@@ -42,6 +59,50 @@ class Dispatcher:
             arm_servo=AngularServo(pin=17, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000),
             finger_servo=AngularServo(pin=18, min_angle=0, max_angle=180, min_pulse_width=0.5/1000, max_pulse_width=2.5/1000)
         )
+
+    @property
+    def aruco_detector(self):
+        """Lazy-load the ArUco detector on first access"""
+        if self._aruco_detector is None:
+            self._aruco_detector = ArucoDetector(
+                calibration_file="gui/components/calibration_data.npz",
+                marker_length=0.05,  # 50 mm
+                frame_width=self.camera_width,
+                frame_height=self.camera_height
+            )
+        return self._aruco_detector
+
+    def register_camera_connection_callback(self, callback):
+        """
+        Register a callback to be notified when camera connection state changes.
+        Callback should accept: callback(is_connected: bool)
+        """
+        self._camera_connection_callbacks.append(callback)
+
+    def unregister_camera_connection_callback(self, callback):
+        """Unregister a camera connection callback"""
+        if callback in self._camera_connection_callbacks:
+            self._camera_connection_callbacks.remove(callback)
+
+    def _notify_camera_connection_changed(self, is_connected: bool):
+        """Notify all registered callbacks about camera connection state change"""
+        for callback in self._camera_connection_callbacks:
+            try:
+                callback(is_connected)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("Main Logger")
+                logger.error(f"Error in camera connection callback: {e}")
+
+    def connect_camera(self):
+        """
+        Connect to the camera through the Camera driver.
+        Notifies all registered callbacks of the connection state change.
+        """
+        self.camera.connect()
+        is_connected = self.camera.is_connected()
+        self._notify_camera_connection_changed(is_connected)
+        return is_connected
 
     @classmethod
     def create_default(cls):

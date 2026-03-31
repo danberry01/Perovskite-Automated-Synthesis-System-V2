@@ -6,7 +6,6 @@ import json
 import os
 
 from ...components.constants import *
-from drivers.aruco_detector_driver import ArucoDetector
 from drivers.controlboard_driver import ControlBoard
 
 
@@ -20,13 +19,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.dispatcher = dispatcher
         self.control_board: ControlBoard = dispatcher.control_board
         
-        # ArUco detector
-        self.aruco_detector = ArucoDetector(
-            calibration_file="gui/components/calibration_data.npz",
-            marker_length=0.05,
-            frame_width=600,
-            frame_height=400
-        )
+        # Use shared ArUco detector from dispatcher
+        self.aruco_detector = dispatcher.aruco_detector
         
         # Calibration data storage
         self.calibration_data: Dict[int, Dict] = {}  # marker_id -> {'positions': [...], 'absolute_pos': {...}}

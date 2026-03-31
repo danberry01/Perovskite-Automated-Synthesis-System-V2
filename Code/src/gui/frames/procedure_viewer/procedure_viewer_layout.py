@@ -8,9 +8,10 @@ from .console_frame import ConsoleFrame
 
 class ProcedureViewerFrame(ctk.CTkFrame):
     """Frame to display current state of procedure"""
-    def __init__(self, master, procedure_handler, **kwargs):
+    def __init__(self, master, dispatcher, procedure_handler, **kwargs):
         super().__init__(master, fg_color = BACKGROUND_COLOR)
 
+        self.dispatcher = dispatcher
         self.procedure_handler = procedure_handler
         
         self.columnconfigure(0, weight = 1, minsize = 500)
@@ -27,7 +28,7 @@ class ProcedureViewerFrame(ctk.CTkFrame):
         )
         self.procedure_queue_frame.grid(row = 0, column = 0, rowspan = 2, padx = 10, pady = 10, sticky = "nsew")
         
-        self.camera_frame = CameraFrame(master = self)
+        self.camera_frame = CameraFrame(master = self, dispatcher = self.dispatcher)
         self.camera_frame.grid(row = 0, column = 1, padx = 10, pady = 10, sticky = "nsew")
 
         self.console_frame = ConsoleFrame(master = self)

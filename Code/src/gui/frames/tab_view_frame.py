@@ -38,6 +38,7 @@ class TabViewFrame(ctk.CTkFrame):
 
         self.procedure_viewer_frame = ProcedureViewerFrame(
             master = self,
+            dispatcher = self.dispatcher,
             procedure_handler = self.procedure_handler
             )
         
