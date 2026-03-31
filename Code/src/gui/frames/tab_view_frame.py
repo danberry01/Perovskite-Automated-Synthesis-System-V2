@@ -1,7 +1,9 @@
 import customtkinter as ctk
 from ..components.constants import *
 
-from ..frames import FileManagerFrame, SettingsFrame, ArucoCalibrationFrame
+from .file_manager_frame import FileManagerFrame
+from .settings_frame import SettingsFrame
+from .calibration import ArucoCalibrationFrame
 
 from .procedure_viewer import ProcedureViewerFrame
 from .procedure_builder import ProcedureBuilderFrame
