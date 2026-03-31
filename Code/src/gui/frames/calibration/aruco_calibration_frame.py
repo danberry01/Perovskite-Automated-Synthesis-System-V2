@@ -164,7 +164,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             width=280,
             height=150,
             font=("Courier", 9),
-            state="disabled"
+            state="disabled",
+            text_color = PLAIN_TEXT_COLOR
         )
         self.markers_display.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
         
@@ -177,7 +178,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             width=280,
             height=150,
             font=("Courier", 9),
-            state="disabled"
+            state="disabled",
+            text_color = PLAIN_TEXT_COLOR
         )
         self.positions_listbox.grid(row=5, column=0, sticky="nsew", padx=5, pady=5)
         
