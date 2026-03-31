@@ -10,7 +10,7 @@ class ArucoCalibrationMainPanel(ctk.CTkFrame):
         # Layout configuration
         self.columnconfigure(0, weight=1)
 
-        camera_label = ctk.CTkLabel(self, text="Camera Feed", font=("Arial", 25 "bold"))
+        camera_label = ctk.CTkLabel(self, text="Camera Feed", font = ("Arial", 25, "bold"))
         camera_label.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
 
         self.camera_display = ctk.CTkLabel(
