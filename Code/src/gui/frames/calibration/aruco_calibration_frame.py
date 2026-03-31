@@ -11,6 +11,171 @@ from ...components.constants import *
 from drivers.controlboard_driver import ControlBoard
 
 
+class ArucoCalibrationMainPanel(ctk.CTkFrame):
+    def __init__(self, master, controller):
+        super().__init__(master, fg_color=FOREGROUND_COLOR)
+        self.controller = controller
+
+        camera_label = ctk.CTkLabel(self, text="Camera Feed", font=("Arial", 12, "bold"))
+        camera_label.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+
+        self.camera_display = ctk.CTkLabel(
+            self,
+            width=600,
+            height=400,
+            bg_color="#000000",
+            text="",
+            corner_radius=0
+        )
+        self.camera_display.grid(row=1, column=0, padx=5, pady=5)
+
+        status_frame = ctk.CTkFrame(self, fg_color=FOREGROUND_COLOR_TWO)
+        status_frame.grid(row=2, column=0, padx=5, pady=5, sticky="ew")
+        status_frame.columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(status_frame, text="Status:", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, pady=3)
+        self.status_label = ctk.CTkLabel(status_frame, text="Ready", font=("Arial", 10))
+        self.status_label.grid(row=0, column=1, padx=5, pady=3, sticky="w")
+
+        position_frame = ctk.CTkFrame(self, fg_color=FOREGROUND_COLOR_TWO)
+        position_frame.grid(row=3, column=0, padx=5, pady=5, sticky="ew")
+        position_frame.columnconfigure(0, weight=1)
+
+        self.position_label = ctk.CTkLabel(
+            position_frame,
+            text="Gantry Position: X=0.00mm Y=0.00mm Z=0.00mm",
+            font=("Arial", 9),
+            justify="left"
+        )
+        self.position_label.grid(row=0, column=0, padx=5, pady=3, sticky="ew")
+
+        # Expose controller handles so ArucoCalibrationFrame can use them
+        self.controller.camera_display = self.camera_display
+        self.controller.status_label = self.status_label
+        self.controller.position_label = self.position_label
+
+
+class ArucoCalibrationSidePanel(ctk.CTkFrame):
+    def __init__(self, master, controller):
+        super().__init__(master, fg_color=FOREGROUND_COLOR)
+        self.controller = controller
+
+        controls_label = ctk.CTkLabel(self, text="Calibration Controls", font=("Arial", 12, "bold"))
+        controls_label.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+
+        button_frame = ctk.CTkFrame(self, fg_color=FOREGROUND_COLOR)
+        button_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+
+        self.scan_button = ctk.CTkButton(
+            button_frame,
+            text="Start Calibration Scan",
+            command=self.controller._start_calibration_scan,
+            fg_color="#2E7D32",
+            hover_color="#1B5E20"
+        )
+        self.scan_button.grid(row=0, column=0, sticky="ew", padx=2, pady=5)
+
+        self.cancel_button = ctk.CTkButton(
+            button_frame,
+            text="Cancel",
+            command=self.controller._cancel_calibration,
+            fg_color="#C62828",
+            hover_color="#880E4F",
+            state="disabled"
+        )
+        self.cancel_button.grid(row=0, column=1, sticky="ew", padx=2, pady=5)
+
+        self.home_button = ctk.CTkButton(
+            button_frame,
+            text="Home Gantry",
+            command=self.controller._home_gantry,
+            fg_color="#1565C0",
+            hover_color="#0D47A1"
+        )
+        self.home_button.grid(row=1, column=0, sticky="ew", padx=2, pady=5)
+
+        self.refresh_position_button = ctk.CTkButton(
+            button_frame,
+            text="Refresh Position",
+            command=self.controller._refresh_position,
+            fg_color="#616161",
+            hover_color="#424242"
+        )
+        self.refresh_position_button.grid(row=1, column=1, sticky="ew", padx=2, pady=5)
+
+        markers_label = ctk.CTkLabel(self, text="Detected Markers", font=("Arial", 12, "bold"))
+        markers_label.grid(row=2, column=0, sticky="ew", padx=5, pady=(10, 5))
+
+        self.markers_display = ctk.CTkTextbox(
+            self,
+            width=280,
+            height=150,
+            font=("Courier", 9),
+            state="disabled",
+            text_color=PLAIN_TEXT_COLOR
+        )
+        self.markers_display.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
+
+        positions_label = ctk.CTkLabel(self, text="Calibrated Positions", font=("Arial", 12, "bold"))
+        positions_label.grid(row=4, column=0, sticky="ew", padx=5, pady=(10, 5))
+
+        self.positions_listbox = ctk.CTkTextbox(
+            self,
+            width=280,
+            height=150,
+            font=("Courier", 9),
+            state="disabled",
+            text_color=PLAIN_TEXT_COLOR
+        )
+        self.positions_listbox.grid(row=5, column=0, sticky="nsew", padx=5, pady=5)
+
+        management_frame = ctk.CTkFrame(self, fg_color=FOREGROUND_COLOR)
+        management_frame.grid(row=6, column=0, sticky="ew", padx=5, pady=5)
+        management_frame.columnconfigure(0, weight=1)
+        management_frame.columnconfigure(1, weight=1)
+
+        self.save_button = ctk.CTkButton(
+            management_frame,
+            text="Save Selected",
+            command=self.controller._save_selected_position,
+            fg_color="#00897B",
+            hover_color="#004D40",
+            state="disabled"
+        )
+        self.save_button.grid(row=0, column=0, sticky="ew", padx=2, pady=5)
+
+        self.delete_button = ctk.CTkButton(
+            management_frame,
+            text="Delete Selected",
+            command=self.controller._delete_selected_position,
+            fg_color="#D32F2F",
+            hover_color="#B71C1C",
+            state="disabled"
+        )
+        self.delete_button.grid(row=0, column=1, sticky="ew", padx=2, pady=5)
+
+        self.clear_all_button = ctk.CTkButton(
+            management_frame,
+            text="Clear All",
+            command=self.controller._clear_all_calibrations,
+            fg_color="#F57F17",
+            hover_color="#E65100"
+        )
+        self.clear_all_button.grid(row=1, column=0, columnspan=2, sticky="ew", padx=2, pady=5)
+
+        self.controller.scan_button = self.scan_button
+        self.controller.cancel_button = self.cancel_button
+        self.controller.home_button = self.home_button
+        self.controller.refresh_position_button = self.refresh_position_button
+        self.controller.markers_display = self.markers_display
+        self.controller.positions_listbox = self.positions_listbox
+        self.controller.save_button = self.save_button
+        self.controller.delete_button = self.delete_button
+        self.controller.clear_all_button = self.clear_all_button
+
+
 class ArucoCalibrationFrame(ctk.CTkFrame):
     """Frame for calibrating ArUco marker positions in absolute coordinate system"""
     
@@ -45,180 +210,42 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self._load_calibration_data()
     
     def _setup_ui(self):
-        """Setup the user interface"""
+        """Setup the user interface using split main/side panel classes"""
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
-        
-        # Header
+
         header = ctk.CTkLabel(
             self,
             text="ArUco Marker Position Calibration",
             font=("Arial", 18, "bold")
         )
         header.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
-        
-        # Main content area
+
         main_container = ctk.CTkFrame(self, fg_color=FOREGROUND_COLOR)
         main_container.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
-        main_container.columnconfigure(0, weight=1)
+        main_container.columnconfigure(0, weight=2)
+        main_container.columnconfigure(1, weight=1)
         main_container.rowconfigure(0, weight=1)
-        
-        # Left side: Camera feed and controls
-        left_panel = ctk.CTkFrame(main_container, fg_color=FOREGROUND_COLOR)
-        left_panel.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        left_panel.columnconfigure(0, weight=1)
-        
-        # Camera feed
-        camera_label = ctk.CTkLabel(left_panel, text="Camera Feed", font=("Arial", 12, "bold"))
-        camera_label.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
-        
-        self.camera_display = ctk.CTkLabel(
-            left_panel,
-            width=600,
-            height=400,
-            bg_color="#000000",
-            text="",
-            corner_radius=0
-        )
-        self.camera_display.grid(row=1, column=0, padx=5, pady=5)
-        
-        # Status display
-        status_frame = ctk.CTkFrame(left_panel, fg_color=FOREGROUND_COLOR_TWO)
-        status_frame.grid(row=2, column=0, padx=5, pady=5, sticky="ew")
-        status_frame.columnconfigure(1, weight=1)
-        
-        ctk.CTkLabel(status_frame, text="Status:", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, pady=3)
-        self.status_label = ctk.CTkLabel(status_frame, text="Ready", font=("Arial", 10))
-        self.status_label.grid(row=0, column=1, padx=5, pady=3, sticky="w")
-        
-        # Gantry position display
-        position_frame = ctk.CTkFrame(left_panel, fg_color=FOREGROUND_COLOR_TWO)
-        position_frame.grid(row=3, column=0, padx=5, pady=5, sticky="ew")
-        position_frame.columnconfigure(0, weight=1)
-        
-        positions_text = "Gantry Position: X={:.2f}mm Y={:.2f}mm Z={:.2f}mm"
-        self.position_label = ctk.CTkLabel(
-            position_frame,
-            text=positions_text.format(0, 0, 0),
-            font=("Arial", 9),
-            justify="left"
-        )
-        self.position_label.grid(row=0, column=0, padx=5, pady=3, sticky="ew")
-        
-        # Right side: Controls and list
-        right_panel = ctk.CTkFrame(main_container, fg_color=FOREGROUND_COLOR)
-        right_panel.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
-        right_panel.columnconfigure(0, weight=1)
-        right_panel.rowconfigure(3, weight=1)
-        
-        # Calibration controls
-        controls_label = ctk.CTkLabel(right_panel, text="Calibration Controls", font=("Arial", 12, "bold"))
-        controls_label.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
-        
-        button_frame = ctk.CTkFrame(right_panel, fg_color=FOREGROUND_COLOR)
-        button_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
-        button_frame.columnconfigure(0, weight=1)
-        button_frame.columnconfigure(1, weight=1)
-        
-        self.scan_button = ctk.CTkButton(
-            button_frame,
-            text="Start Calibration Scan",
-            command=self._start_calibration_scan,
-            fg_color="#2E7D32",
-            hover_color="#1B5E20"
-        )
-        self.scan_button.grid(row=0, column=0, sticky="ew", padx=2, pady=5)
-        
-        self.cancel_button = ctk.CTkButton(
-            button_frame,
-            text="Cancel",
-            command=self._cancel_calibration,
-            fg_color="#C62828",
-            hover_color="#880E4F",
-            state="disabled"
-        )
-        self.cancel_button.grid(row=0, column=1, sticky="ew", padx=2, pady=5)
-        
-        self.home_button = ctk.CTkButton(
-            button_frame,
-            text="Home Gantry",
-            command=self._home_gantry,
-            fg_color="#1565C0",
-            hover_color="#0D47A1"
-        )
-        self.home_button.grid(row=1, column=0, sticky="ew", padx=2, pady=5)
-        
-        self.refresh_position_button = ctk.CTkButton(
-            button_frame,
-            text="Refresh Position",
-            command=self._refresh_position,
-            fg_color="#616161",
-            hover_color="#424242"
-        )
-        self.refresh_position_button.grid(row=1, column=1, sticky="ew", padx=2, pady=5)
-        
-        # Detected markers section
-        markers_label = ctk.CTkLabel(right_panel, text="Detected Markers", font=("Arial", 12, "bold"))
-        markers_label.grid(row=2, column=0, sticky="ew", padx=5, pady=(10, 5))
-        
-        self.markers_display = ctk.CTkTextbox(
-            right_panel,
-            width=280,
-            height=150,
-            font=("Courier", 9),
-            state="disabled",
-            text_color = PLAIN_TEXT_COLOR
-        )
-        self.markers_display.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
-        
-        # Calibrated positions section
-        positions_label = ctk.CTkLabel(right_panel, text="Calibrated Positions", font=("Arial", 12, "bold"))
-        positions_label.grid(row=4, column=0, sticky="ew", padx=5, pady=(10, 5))
-        
-        self.positions_listbox = ctk.CTkTextbox(
-            right_panel,
-            width=280,
-            height=150,
-            font=("Courier", 9),
-            state="disabled",
-            text_color = PLAIN_TEXT_COLOR
-        )
-        self.positions_listbox.grid(row=5, column=0, sticky="nsew", padx=5, pady=5)
-        
-        # Position management buttons
-        management_frame = ctk.CTkFrame(right_panel, fg_color=FOREGROUND_COLOR)
-        management_frame.grid(row=6, column=0, sticky="ew", padx=5, pady=5)
-        management_frame.columnconfigure(0, weight=1)
-        management_frame.columnconfigure(1, weight=1)
-        
-        self.save_button = ctk.CTkButton(
-            management_frame,
-            text="Save Selected",
-            command=self._save_selected_position,
-            fg_color="#00897B",
-            hover_color="#004D40",
-            state="disabled"
-        )
-        self.save_button.grid(row=0, column=0, sticky="ew", padx=2, pady=5)
-        
-        self.delete_button = ctk.CTkButton(
-            management_frame,
-            text="Delete Selected",
-            command=self._delete_selected_position,
-            fg_color="#D32F2F",
-            hover_color="#B71C1C",
-            state="disabled"
-        )
-        self.delete_button.grid(row=0, column=1, sticky="ew", padx=2, pady=5)
-        
-        self.clear_all_button = ctk.CTkButton(
-            management_frame,
-            text="Clear All",
-            command=self._clear_all_calibrations,
-            fg_color="#F57F17",
-            hover_color="#E65100"
-        )
-        self.clear_all_button.grid(row=1, column=0, columnspan=2, sticky="ew", padx=2, pady=5)
+
+        self.main_panel = ArucoCalibrationMainPanel(main_container, controller=self)
+        self.main_panel.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+
+        self.side_panel = ArucoCalibrationSidePanel(main_container, controller=self)
+        self.side_panel.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+
+        # Mirror control references to allow existing logic to run unchanged
+        self.scan_button = self.side_panel.scan_button
+        self.cancel_button = self.side_panel.cancel_button
+        self.home_button = self.side_panel.home_button
+        self.refresh_position_button = self.side_panel.refresh_position_button
+        self.markers_display = self.side_panel.markers_display
+        self.positions_listbox = self.side_panel.positions_listbox
+        self.save_button = self.side_panel.save_button
+        self.delete_button = self.side_panel.delete_button
+        self.clear_all_button = self.side_panel.clear_all_button
+        self.status_label = self.main_panel.status_label
+        self.camera_display = self.main_panel.camera_display
+        self.position_label = self.main_panel.position_label
     
     def _update_camera_display(self):
         """Update the camera display with the latest frame from shared video capture"""
