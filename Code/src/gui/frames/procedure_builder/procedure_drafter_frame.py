@@ -200,12 +200,28 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         sig = signature(func)
 
         default_args = []
-        for param in list(sig.parameters.values())[1:]:  # keep your existing convention
+        for i, param in enumerate(list(sig.parameters.values())[1:]):  # keep your existing convention
             if param.default is not param.empty:
                 default_args.append(param.default)
+            elif full_name == "move_to_location" and i == 0:
+                # For move_to_location destination, try to get first location
+                try:
+                    locations = self._get_location_names_for_defaults()
+                    default_args.append(locations[0] if locations else "location_name")
+                except:
+                    default_args.append("location_name")
             else:
                 default_args.append(0)
         return default_args
+
+    def _get_location_names_for_defaults(self):
+        """Get location names for default args"""
+        try:
+            from drivers.procedure_file_driver import ProcedureFile
+            locations = ProcedureFile().Open("persistant/locations.yml")
+            return [loc[0] for loc in locations if loc[0]]
+        except Exception as e:
+            return []
 
     def add_step(self):
         self.save_state()
@@ -321,7 +337,8 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
                     index=pos,
                     args=step["args"],
                     move_callback=self.move_step,
-                    select_callback=self.select_step
+                    select_callback=self.select_step,
+                    move_registry=self.move_registry
                 )
                 item.pack(fill="x", padx=5, pady=2)
                 self.step_widgets.append(item)

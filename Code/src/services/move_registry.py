@@ -197,15 +197,15 @@ class MoveRegistry():
                 raise Exception("Hotplate failed to reach temperature in under 600 seconds. Try a larger threshold?")
 
     # --------- TOOLHEAD MOVES --------
-    def move_toolhead(self, x: float, y: float, z: float, relaitve: int):
+    def move_toolhead(self, x: float, y: float, z: float, relative: int):
         """Move the toolhead to the specified coordiantes """
-        rrelaitve = False
-        if relaitve >= 1:
-            rrelaitve = True
+        rrelative = False
+        if relative >= 1:
+            rrelative = True
         
-        self.toolhead.move_axis("X", x, relative=rrelaitve)
-        self.toolhead.move_axis("Y", y, relative=rrelaitve)
-        self.toolhead.move_axis("Z", z, relative=rrelaitve)
+        self.toolhead.move_axis("X", x, relative=rrelative)
+        self.toolhead.move_axis("Y", y, relative=rrelative)
+        self.toolhead.move_axis("Z", z, relative=rrelative)
         
     def move_to_location(self, destination: str):
         self.validate_location(destination)
