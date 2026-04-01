@@ -97,7 +97,7 @@ class StepItem(ctk.CTkFrame):
     def _create_control_for_param(self, container, param_index, value, param_name):
         """Create appropriate UI control based on parameter type and function"""
         
-        # Special case: move_to_location destination parameter
+        # Special case: move_to_location destination parameter (index 0)
         if self.function_name == "move_to_location" and param_index == 0:
             location_names = self._get_location_names()
             dropdown = ctk.CTkOptionMenu(
@@ -113,13 +113,13 @@ class StepItem(ctk.CTkFrame):
             dropdown.pack(side="left")
             return dropdown
         
-        # Special case: move_toolhead relative parameter (last parameter is relative flag)
-        elif self.function_name == "move_toolhead" and param_name == "relative":
+        # Special case: move_toolhead relative parameter (index 3)
+        elif self.function_name == "move_toolhead" and param_index == 3:
             checkbox = ctk.CTkCheckBox(
                 container,
                 text="",
                 width=20,
-                command=lambda: self._update_arg_from_widget(param_index, 1 if checkbox.get() else 0)
+                command=lambda: self._update_checkbox_arg(param_index, checkbox)
             )
             checkbox.pack(side="left")
             # Set initial state
@@ -130,8 +130,8 @@ class StepItem(ctk.CTkFrame):
                 pass
             return checkbox
         
-        # Special case: measure_spectrum measurement_type
-        elif self.function_name == "measure_spectrum" and param_name == "measurement_type":
+        # Special case: measure_spectrum measurement_type parameter (index 0)
+        elif self.function_name == "measure_spectrum" and param_index == 0:
             measurement_types = ["Background", "Reference", "Sample"]
             dropdown = ctk.CTkOptionMenu(
                 container,
@@ -170,23 +170,9 @@ class StepItem(ctk.CTkFrame):
         except Exception as e:
             return ["Error loading locations"]
 
-    def _update_arg_from_widget(self, index, value):
-        """Update argument from widget value"""
-        # Try to convert to number if it looks like one
-        if isinstance(value, str):
-            value = value.strip()
-            try:
-                # Try int first
-                value = int(value)
-            except ValueError:
-                try:
-                    # Try float
-                    value = float(value)
-                except ValueError:
-                    # Keep as string
-                    pass
-        
-        self.args[index] = value
+    def _update_checkbox_arg(self, index, checkbox):
+        """Update argument from checkbox state"""
+        self.args[index] = 1 if checkbox.get() else 0
 
     def move_up(self):
         self.move_callback(self.index, self.index - 1)
