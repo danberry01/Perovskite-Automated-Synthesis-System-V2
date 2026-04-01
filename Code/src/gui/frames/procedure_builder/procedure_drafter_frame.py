@@ -200,7 +200,13 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         sig = signature(func)
 
         default_args = []
-        for i, param in enumerate(list(sig.parameters.values())[1:]):  # keep your existing convention
+        # include all parameters reported by inspect.signature. For bound methods
+        # `self` is typically already removed; if it's present we drop it.
+        params = list(sig.parameters.values())
+        if params and params[0].name == 'self':
+            params = params[1:]
+
+        for i, param in enumerate(params):
             if param.default is not param.empty:
                 default_args.append(param.default)
             elif full_name == "move_to_location" and i == 0:

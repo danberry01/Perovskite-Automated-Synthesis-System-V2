@@ -88,8 +88,10 @@ class StepItem(ctk.CTkFrame):
         try:
             func = self.move_registry.move_dict[self.function_name]
             sig = signature(func)
-            # Skip 'self' parameter
-            params = list(sig.parameters.keys())[1:]
+            params = list(sig.parameters.keys())
+            # If an unbound function includes 'self' as first parameter, drop it
+            if params and params[0] == 'self':
+                params = params[1:]
             return params
         except Exception:
             return []
