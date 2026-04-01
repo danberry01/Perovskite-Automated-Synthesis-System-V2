@@ -61,34 +61,42 @@ class App(ctk.CTk):
             pass
 
     def _on_closing(self):
+        """Run cleanup in a background thread so the GUI can close immediately.
+
+        Heavy or potentially blocking hardware operations (serial writes,
+        disconnects) are executed in a daemon thread to avoid freezing the
+        main thread when the user clicks the window close (X) button.
+        """
         logger = logging.getLogger("Main Logger")
-        logger.info("Application closing — running cleanup")
-        # Stop any running procedure and issue emergency stop
-        try:
-            if self.procedure_handler:
-                self.procedure_handler.kill()
-        except Exception:
-            logger.exception("Error while killing procedure handler during shutdown")
+        logger.info("Application closing — scheduling cleanup")
 
-        # Ensure hardware is commanded to a safe state
-        try:
-            if self.move_registry:
-                self.move_registry.kill()
-        except Exception:
-            logger.exception("Error while invoking move_registry.kill() during shutdown")
+        def _cleanup():
+            logger.info("Background cleanup started")
+            # Stop any running procedure and issue emergency stop
+            try:
+                if self.procedure_handler:
+                    self.procedure_handler.kill()
+            except Exception:
+                logger.exception("Error while killing procedure handler during shutdown")
 
-        # Give hardware a short moment to process stop commands
-        sleep(0.2)
+            # Ensure hardware is commanded to a safe state
+            try:
+                if self.move_registry:
+                    self.move_registry.kill()
+            except Exception:
+                logger.exception("Error while invoking move_registry.kill() during shutdown")
 
-        # Disconnect hardware drivers where possible
-        try:
-            drivers = [
-                'control_board', 'spin_coater', 'camera', 'spectrometer', 'hotplate', 'vial_carousel'
-            ]
-            for name in drivers:
-                try:
-                    if hasattr(self.dispatcher, name):
-                        drv = getattr(self.dispatcher, name)
+            # Give hardware a short moment to process stop commands
+            sleep(0.2)
+
+            # Disconnect hardware drivers where possible
+            try:
+                drivers = [
+                    'control_board', 'spin_coater', 'camera', 'spectrometer', 'hotplate', 'vial_carousel'
+                ]
+                for name in drivers:
+                    try:
+                        drv = getattr(self.dispatcher, name, None)
                         if drv is None:
                             continue
                         if hasattr(drv, 'disconnect') and callable(drv.disconnect):
@@ -96,12 +104,21 @@ class App(ctk.CTk):
                                 drv.disconnect()
                             except Exception:
                                 logger.exception(f"Error disconnecting {name}")
-                except Exception:
-                    logger.exception(f"Error during shutdown driver cleanup for {name}")
-        except Exception:
-            logger.exception("Error during driver cleanup")
+                    except Exception:
+                        logger.exception(f"Error during shutdown driver cleanup for {name}")
+            except Exception:
+                logger.exception("Error during driver cleanup")
 
-        # Destroy the GUI and exit
+            logger.info("Background cleanup finished")
+
+        # Run cleanup in background and close GUI immediately
+        try:
+            import threading as _threading
+            t = _threading.Thread(target=_cleanup, daemon=True)
+            t.start()
+        except Exception:
+            logger.exception("Failed to start background cleanup thread")
+
         try:
             self.destroy()
         except Exception:
