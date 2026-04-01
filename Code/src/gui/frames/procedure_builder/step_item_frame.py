@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import os
 import sys
+from inspect import signature
 
 # Import procedure file driver
 path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../'))
@@ -16,12 +17,10 @@ class StepItem(ctk.CTkFrame):
         self.move_callback = move_callback
         self.select_callback = select_callback
         self.move_registry = move_registry
-
+        self.function_name = text  # Store function name for parameter mapping
+        
         self.args = list(args)
-        self.entries = []
-        self.dropdowns = []
-        self.checkboxes = []
-
+        self.control_widgets = {}  # Map index -> control widget
         self._selected = False
 
         # --- Top row: arrows + step name ---
@@ -42,7 +41,7 @@ class StepItem(ctk.CTkFrame):
             self.top_row,
             text=text,
             anchor="w",
-            text_color="white"  # explicitly visible
+            text_color="white"
         )
         self.label.pack(side="left", fill="x", expand=True)
         self.label.bind("<Button-1>", lambda e: self.select_callback(self.index))
@@ -58,64 +57,102 @@ class StepItem(ctk.CTkFrame):
         )
         self.down_button.pack(side="right", padx=(4, 0))
 
-        # --- Argument row: only if args exist ---
+        # --- Argument row with context-aware controls ---
         if self.args:
             self.args_frame = ctk.CTkFrame(self, fg_color="transparent")
             self.args_frame.pack(fill="x", padx=5, pady=(0, 5))
 
-            self.arg_labels = []
+            # Get parameter names from function signature if available
+            param_names = self._get_parameter_names()
+
             for i, val in enumerate(self.args):
                 container = ctk.CTkFrame(self.args_frame, fg_color="transparent")
                 container.pack(side="left", padx=(0, 8), pady=2)
 
-                arg_label = ctk.CTkLabel(container, text=f"{i}:", width=16, text_color="white")
+                # Create parameter label with descriptive name
+                param_label = param_names[i] if i < len(param_names) else f"{i}"
+                arg_label = ctk.CTkLabel(container, text=f"{param_label}:", width=80, text_color="white")
                 arg_label.pack(side="left")
 
-                # Special handling for specific functions
-                if text == "move_to_location" and i == 0:
-                    # Dropdown for location names
-                    location_names = self._get_location_names()
-                    dropdown = ctk.CTkOptionMenu(
-                        container, 
-                        width=120,
-                        values=location_names,
-                        command=lambda selected, idx=i: self.update_arg(idx, selected)
-                    )
-                    if str(val) in location_names:
-                        dropdown.set(str(val))
-                    else:
-                        dropdown.set(location_names[0] if location_names else "")
-                    dropdown.pack(side="left")
-                    self.dropdowns.append(dropdown)
-                    
-                elif text == "move_toolhead" and i == 3:
-                    # Checkbox for relative
-                    checkbox = ctk.CTkCheckBox(
-                        container,
-                        text="",
-                        width=20,
-                        command=lambda idx=i: self.update_checkbox_arg(idx)
-                    )
-                    checkbox.pack(side="left")
-                    # Set initial state
-                    if val and int(val) >= 1:
-                        checkbox.select()
-                    self.checkboxes.append((checkbox, i))
-                    
-                else:
-                    # Default entry for other args
-                    entry = ctk.CTkEntry(container, width=72)
-                    entry.insert(0, str(val))
-                    entry.pack(side="left")
-                    entry.bind("<FocusOut>", self._make_update_callback(i))
-                    self.entries.append(entry)
-                    
-                self.arg_labels.append(arg_label)
+                # Create appropriate control based on function and parameter
+                control = self._create_control_for_param(container, i, val, param_label)
+                self.control_widgets[i] = control
 
         self.set_selected(False)
 
-    def _make_update_callback(self, index):
-        return lambda event: self.update_arg(index)
+    def _get_parameter_names(self):
+        """Get parameter names from function signature"""
+        if not self.move_registry or self.function_name not in self.move_registry.move_dict:
+            return []
+        
+        try:
+            func = self.move_registry.move_dict[self.function_name]
+            sig = signature(func)
+            # Skip 'self' parameter
+            params = list(sig.parameters.keys())[1:]
+            return params
+        except Exception:
+            return []
+
+    def _create_control_for_param(self, container, param_index, value, param_name):
+        """Create appropriate UI control based on parameter type and function"""
+        
+        # Special case: move_to_location destination parameter
+        if self.function_name == "move_to_location" and param_index == 0:
+            location_names = self._get_location_names()
+            dropdown = ctk.CTkOptionMenu(
+                container, 
+                width=150,
+                values=location_names,
+                command=lambda selected: self._update_arg_from_widget(param_index, selected)
+            )
+            if str(value) in location_names:
+                dropdown.set(str(value))
+            else:
+                dropdown.set(location_names[0] if location_names else "")
+            dropdown.pack(side="left")
+            return dropdown
+        
+        # Special case: move_toolhead relative parameter (last parameter is relative flag)
+        elif self.function_name == "move_toolhead" and param_name == "relative":
+            checkbox = ctk.CTkCheckBox(
+                container,
+                text="",
+                width=20,
+                command=lambda: self._update_arg_from_widget(param_index, 1 if checkbox.get() else 0)
+            )
+            checkbox.pack(side="left")
+            # Set initial state
+            try:
+                if int(value) >= 1:
+                    checkbox.select()
+            except ValueError:
+                pass
+            return checkbox
+        
+        # Special case: measure_spectrum measurement_type
+        elif self.function_name == "measure_spectrum" and param_name == "measurement_type":
+            measurement_types = ["Background", "Reference", "Sample"]
+            dropdown = ctk.CTkOptionMenu(
+                container,
+                width=120,
+                values=measurement_types,
+                command=lambda selected: self._update_arg_from_widget(param_index, selected)
+            )
+            if str(value) in measurement_types:
+                dropdown.set(str(value))
+            else:
+                dropdown.set(measurement_types[0] if measurement_types else "")
+            dropdown.pack(side="left")
+            return dropdown
+        
+        # Default: text entry with smart type conversion
+        else:
+            entry = ctk.CTkEntry(container, width=80, placeholder_text=str(value))
+            entry.insert(0, str(value))
+            entry.pack(side="left")
+            entry.bind("<FocusOut>", lambda e: self._update_arg_from_widget(param_index, entry.get()))
+            return entry
 
     def _get_location_names(self):
         """Get list of location names from persistent locations"""
@@ -131,33 +168,25 @@ class StepItem(ctk.CTkFrame):
             locations = ProcedureFile().Open("persistant/locations.yml")
             return [loc[0] for loc in locations if loc[0]]
         except Exception as e:
-            print(f"Error loading locations: {e}")
             return ["Error loading locations"]
 
-    def update_checkbox_arg(self, index):
-        """Update argument from checkbox state"""
-        for checkbox, idx in self.checkboxes:
-            if idx == index:
-                self.args[index] = 1 if checkbox.get() else 0
-                break
-
-    def update_arg(self, index, value=None):
-        """Update argument value"""
-        if value is not None:
-            self.args[index] = value
-        else:
+    def _update_arg_from_widget(self, index, value):
+        """Update argument from widget value"""
+        # Try to convert to number if it looks like one
+        if isinstance(value, str):
+            value = value.strip()
             try:
-                raw_value = self.entries[index].get().strip()
+                # Try int first
+                value = int(value)
+            except ValueError:
                 try:
-                    value = int(raw_value)
+                    # Try float
+                    value = float(value)
                 except ValueError:
-                    try:
-                        value = float(raw_value)
-                    except ValueError:
-                        value = raw_value
-                self.args[index] = value
-            except Exception:
-                pass
+                    # Keep as string
+                    pass
+        
+        self.args[index] = value
 
     def move_up(self):
         self.move_callback(self.index, self.index - 1)
