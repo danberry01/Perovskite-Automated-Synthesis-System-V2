@@ -19,7 +19,9 @@ class StepItem(ctk.CTkFrame):
         self.move_registry = move_registry
         self.function_name = text  # Store function name for parameter mapping
         
-        self.args = list(args)
+        # Keep a reference to the parent's args list so updates propagate
+        # back to ProcedureDrafterFrame.steps
+        self.args = args
         self.control_widgets = {}  # Map index -> control widget
         self._selected = False
 
@@ -175,6 +177,51 @@ class StepItem(ctk.CTkFrame):
     def _update_checkbox_arg(self, index, checkbox):
         """Update argument from checkbox state"""
         self.args[index] = 1 if checkbox.get() else 0
+
+    def _update_arg_from_widget(self, index, value):
+        """Update argument from a widget value, with smart type conversion.
+
+        This writes directly into `self.args` (which references the parent
+        step's args list) so the ProcedureDrafterFrame will see the change.
+        """
+        # If the currently stored value has a numeric type, try to cast
+        try:
+            current = None
+            if index < len(self.args):
+                current = self.args[index]
+
+            # If the incoming value is already the same type, just assign
+            if isinstance(current, int):
+                try:
+                    self.args[index] = int(value)
+                    return
+                except Exception:
+                    pass
+            if isinstance(current, float):
+                try:
+                    self.args[index] = float(value)
+                    return
+                except Exception:
+                    pass
+
+            # Otherwise attempt best-effort numeric conversion
+            try:
+                if isinstance(value, str) and value.isdigit():
+                    self.args[index] = int(value)
+                    return
+                # try float
+                self.args[index] = float(value)
+                return
+            except Exception:
+                # fallback to string
+                pass
+
+            # final fallback: store as-is (string or other)
+            self.args[index] = value
+        except Exception:
+            # avoid crashing UI; log minimally to console
+            import logging
+            logging.getLogger("Main Logger").exception("Failed to update argument from widget")
 
     def move_up(self):
         self.move_callback(self.index, self.index - 1)
