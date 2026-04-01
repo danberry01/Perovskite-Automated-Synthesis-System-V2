@@ -117,6 +117,12 @@ class ProcedureHandler(threading.Thread):
         if not self.procedure:
             self.logger.error("No procedure set")
             return
+        # Clear any previous emergency kill state before starting
+        try:
+            if hasattr(self.move_registry, 'reset_kill'):
+                self.move_registry.reset_kill()
+        except Exception:
+            self.logger.exception("Failed to reset kill state on begin")
    
         self.started.set()
         self.paused.clear()
@@ -133,8 +139,14 @@ class ProcedureHandler(threading.Thread):
         
             
     def kill(self):
-        self.move_registry.kill()
-        self.logger.error("Machine shut down. Reboot required")
+        # Issue emergency stop to all hardware and stop the procedure thread
+        try:
+            self.move_registry.kill()
+        except Exception:
+            self.logger.exception("Error while executing move_registry.kill()")
+        # Ensure the procedure is no longer considered started so it can be restarted
+        self.stop()
+        self.logger.error("Emergency stop triggered; procedure stopped")
 
     def pause(self):
         """Pause the procedure."""

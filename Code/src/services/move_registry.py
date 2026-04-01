@@ -26,6 +26,12 @@ class MoveRegistry():
         self.logger = logging.getLogger("Main Logger")
         
         self.toolhead = dispatcher.toolhead
+        # Keep a reference to the low-level control board for emergency control
+        try:
+            self.control_board = dispatcher.control_board
+        except Exception:
+            self.control_board = None
+        
         self.infeed = dispatcher.infeed
         self.pipette_handler = dispatcher.pipette_handler
         self.spin_coater = dispatcher.spin_coater
@@ -151,10 +157,46 @@ class MoveRegistry():
 
         
     def kill(self):
-        self.control_board.kill()
-        self.spin_coater.stop()
-        self.spin_coater.clear_steps()
-        self.gripper.detatch_servos()
+        """Emergency stop for all hardware controlled by the MoveRegistry.
+
+        Attempts to stop motion immediately and unblock any waiting operations.
+        """
+        self.logger.error("MoveRegistry: Emergency kill invoked")
+        # Control board
+        try:
+            if self.control_board:
+                self.control_board.kill()
+        except Exception as e:
+            self.logger.exception(f"Error while killing control board: {e}")
+
+        # Spin coater
+        try:
+            if self.spin_coater:
+                self.spin_coater.stop()
+                self.spin_coater.clear_steps()
+        except Exception as e:
+            self.logger.exception(f"Error while stopping spin coater: {e}")
+
+        # Gripper
+        try:
+            if self.gripper:
+                self.gripper.detatch_servos()
+        except Exception as e:
+            self.logger.exception(f"Error while detaching gripper servos: {e}")
+
+        # Pipette handler: attempt a safe stop if available
+        try:
+            if self.pipette_handler and hasattr(self.pipette_handler, 'kill'):
+                self.pipette_handler.kill()
+        except Exception as e:
+            self.logger.exception(f"Error while killing pipette handler: {e}")
+
+        # Ensure control board waiting loops are unblocked
+        try:
+            if self.control_board and hasattr(self.control_board, 'received_ok'):
+                self.control_board.received_ok.set()
+        except Exception:
+            pass
         
     def log(self, message: str):
         """ Log the specified message"""
@@ -538,6 +580,16 @@ class MoveRegistry():
             self.logger.info(f"Measurement '{measurement_type}' captured successfully.")
         else:
             self.logger.warning(f"Incomplete data for measurement '{measurement_type}'. Skipping.")
+
+    def reset_kill(self):
+        """Reset any kill state on hardware so operations can resume."""
+        self.logger.debug("MoveRegistry: resetting kill state on hardware")
+        try:
+            if hasattr(self, 'control_board') and self.control_board:
+                if hasattr(self.control_board, 'reset_kill'):
+                    self.control_board.reset_kill()
+        except Exception as e:
+            self.logger.exception(f"Error while resetting control board kill state: {e}")
         
     def automated_measurement(self):
         """Runs the full spectrometer measurement process."""

@@ -60,9 +60,12 @@ class SpinCoater():
             self.logger.error("Serial is not connected")
             return
 
-        self.reader_thread.write(message.encode("ascii"))
-        
-        self.logger.debug(f"Sending command: {message}")
+        try:
+            self.reader_thread.write(message.encode("ascii"))
+            self.logger.debug(f"Sending command: {message}")
+        except Exception as e:
+            self.logger.exception(f"Failed to send spincoater command '{message}': {e}")
+            return
         sleep(0.2)
         
         

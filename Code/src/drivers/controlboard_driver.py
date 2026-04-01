@@ -27,6 +27,8 @@ class ControlBoard():
         self.received_ok = threading.Event()
         
         self.relative_positioning_enabled = False
+        # Internal event used to signal an emergency stop / kill
+        self._kill_event = threading.Event()
 
     def connect(self):
         """Connect to the control board and start the reader thread."""
@@ -51,8 +53,40 @@ class ControlBoard():
         return self.serial is not None and self.serial.is_open
     
     def kill(self):
-        """ Sends M112 to immediately stop steppers and heaters"""
-        self.send_message("M112")
+        """Send emergency stop to the control board and unblock waits.
+
+        This sets an internal kill event, sends the firmware emergency stop
+        (`M112`) and ensures any threads waiting for move completion are
+        unblocked.
+        """
+        self.logger.error("Emergency stop requested on control board")
+        # Mark kill so other methods can abort early
+        try:
+            self._kill_event.set()
+        except Exception:
+            pass
+
+        # Try to send the emergency stop command
+        try:
+            if self.is_connected():
+                self.send_message("M112")
+        except Exception as e:
+            self.logger.exception(f"Failed to send emergency stop: {e}")
+
+        # Wake any threads waiting on OK so they can exit quickly
+        try:
+            self.received_ok.set()
+        except Exception:
+            pass
+
+    def reset_kill(self):
+        """Clear the internal kill state so operations can resume."""
+        try:
+            self._kill_event.clear()
+            self.received_ok.clear()
+            self.logger.debug("Control board kill state cleared")
+        except Exception:
+            self.logger.exception("Failed to clear control board kill state")
         
     def _begin_reader_thread(self):
         self.reader_thread = serial.threaded.ReaderThread(
@@ -72,16 +106,20 @@ class ControlBoard():
         if not self.is_connected():
             self.logger.error("Serial is not connected")
             return
-  
-        
+
         if self.reader_thread is None:
             self.logger.error("Reader thread is not running")
             return
 
         if '\r\n' not in message:
             message += "\r\n"
-        self.reader_thread.write(message.encode("utf-8"))
-        self.logger.debug(f"Sending message: {message}")
+        try:
+            # If a kill was requested, still attempt to send the emergency stop command,
+            # otherwise write normally and log any serial errors.
+            self.reader_thread.write(message.encode("utf-8"))
+            self.logger.debug(f"Sending message: {message}")
+        except Exception as e:
+            self.logger.exception(f"Failed to send message '{message}': {e}")
         
     def move_axis(self, axis: str, distance_mm: float, feedrate_mm_per_minute: int = 2000, relative: bool = False, finish_move: bool = True):
         """ Takes in a list of axes, distances and speeds to move the gantry"""
@@ -90,6 +128,11 @@ class ControlBoard():
   
         if relative and distance_mm == 0:
             return
+
+        # Abort early if an emergency kill has been requested
+        if getattr(self, '_kill_event', None) is not None and self._kill_event.is_set():
+            self.logger.warning("Move aborted: control board in kill state")
+            raise RuntimeError("ControlBoard is in kill state")
         
         if relative:
             self.send_message("G91")
@@ -114,11 +157,29 @@ class ControlBoard():
         if not self.is_connected():
             self.logger.error("Serial is not connected")
             return
+        # Clear any previous OK marker and request move completion
         self.received_ok.clear()
-        sleep(0.5)
-        self.send_message("M400")
-        self.logger.debug("Waiting for move to finish")
-        self.received_ok.wait(timeout=120)  # Wait until the move_finished event is set
+        sleep(0.1)
+        try:
+            self.send_message("M400")
+        except Exception:
+            # send_message already logs failures
+            pass
+
+        self.logger.debug("Waiting for move to finish (interruptible)")
+
+        # Wait in small increments so we can be interrupted by a kill event
+        timeout = 120.0
+        poll_interval = 0.1
+        waited = 0.0
+        while waited < timeout:
+            # If a kill has been requested, break out early
+            if getattr(self, '_kill_event', None) is not None and self._kill_event.is_set():
+                self.logger.info("Finish moves interrupted by kill")
+                break
+            if self.received_ok.wait(timeout=poll_interval):
+                break
+            waited += poll_interval
         
 
 
