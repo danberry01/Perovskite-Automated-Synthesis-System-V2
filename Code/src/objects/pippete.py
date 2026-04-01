@@ -101,8 +101,14 @@ class PipetteHandler():
         self.grabber_servo.angle = 80
         
     def detatch_servos(self):
-        self.tip_eject_servo.detach()
-        self.tip_eject_servo.detach()
+        try:
+            self.tip_eject_servo.detach()
+        except Exception:
+            pass
+        try:
+            self.grabber_servo.detach()
+        except Exception:
+            pass
         
         
         

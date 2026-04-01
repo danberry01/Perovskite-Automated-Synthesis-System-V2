@@ -1,5 +1,7 @@
 import customtkinter as ctk
 import os
+import logging
+from time import sleep
 from .components.constants import *
 from .frames import *
 
@@ -50,6 +52,60 @@ class App(ctk.CTk):
             controller = self
         )
         self.info_frame.grid(row = 1, column = 1, padx = 0, pady = 0, sticky = "nsew")
+
+        # Ensure application performs driver cleanup on window close
+        try:
+            self.protocol("WM_DELETE_WINDOW", self._on_closing)
+        except Exception:
+            # protocol may not be available in some environments; ignore if so
+            pass
+
+    def _on_closing(self):
+        logger = logging.getLogger("Main Logger")
+        logger.info("Application closing — running cleanup")
+        # Stop any running procedure and issue emergency stop
+        try:
+            if self.procedure_handler:
+                self.procedure_handler.kill()
+        except Exception:
+            logger.exception("Error while killing procedure handler during shutdown")
+
+        # Ensure hardware is commanded to a safe state
+        try:
+            if self.move_registry:
+                self.move_registry.kill()
+        except Exception:
+            logger.exception("Error while invoking move_registry.kill() during shutdown")
+
+        # Give hardware a short moment to process stop commands
+        sleep(0.2)
+
+        # Disconnect hardware drivers where possible
+        try:
+            drivers = [
+                'control_board', 'spin_coater', 'camera', 'spectrometer', 'hotplate', 'vial_carousel'
+            ]
+            for name in drivers:
+                try:
+                    if hasattr(self.dispatcher, name):
+                        drv = getattr(self.dispatcher, name)
+                        if drv is None:
+                            continue
+                        if hasattr(drv, 'disconnect') and callable(drv.disconnect):
+                            try:
+                                drv.disconnect()
+                            except Exception:
+                                logger.exception(f"Error disconnecting {name}")
+                except Exception:
+                    logger.exception(f"Error during shutdown driver cleanup for {name}")
+        except Exception:
+            logger.exception("Error during driver cleanup")
+
+        # Destroy the GUI and exit
+        try:
+            self.destroy()
+        except Exception:
+            pass
 
     def switch_tab(self, tab_name):
         self.tab_manager_frame.current_tab = tab_name

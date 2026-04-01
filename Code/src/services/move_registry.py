@@ -177,12 +177,20 @@ class MoveRegistry():
         except Exception as e:
             self.logger.exception(f"Error while stopping spin coater: {e}")
 
-        # Gripper
+        # Gripper: move to a safe/open position rather than detaching servos so
+        # future operations can resume without requiring a manual reattach.
         try:
             if self.gripper:
-                self.gripper.detatch_servos()
+                try:
+                    self.gripper.set_finger_angle(60)
+                    # set a safe arm angle if method available
+                    if hasattr(self.gripper, 'set_arm_angle'):
+                        self.gripper.set_arm_angle(90)
+                except Exception:
+                    # If servo control isn't available, ignore
+                    pass
         except Exception as e:
-            self.logger.exception(f"Error while detaching gripper servos: {e}")
+            self.logger.exception(f"Error while setting gripper to safe state: {e}")
 
         # Pipette handler: attempt a safe stop if available
         try:
@@ -195,6 +203,13 @@ class MoveRegistry():
         try:
             if self.control_board and hasattr(self.control_board, 'received_ok'):
                 self.control_board.received_ok.set()
+        except Exception:
+            pass
+
+        # Unblock spin coater run/wait logic
+        try:
+            if self.spin_coater and hasattr(self.spin_coater, 'done'):
+                self.spin_coater.done.set()
         except Exception:
             pass
         
@@ -590,6 +605,19 @@ class MoveRegistry():
                     self.control_board.reset_kill()
         except Exception as e:
             self.logger.exception(f"Error while resetting control board kill state: {e}")
+        # Ensure spincoater run waits are unblocked so run() doesn't hang
+        try:
+            if self.spin_coater and hasattr(self.spin_coater, 'done'):
+                # mark done so any waiting thread can continue
+                self.spin_coater.done.set()
+                # give a short moment and then clear to restore initial state
+                sleep(0.1)
+                try:
+                    self.spin_coater.done.clear()
+                except Exception:
+                    pass
+        except Exception as e:
+            self.logger.exception(f"Error while resetting spin coater state: {e}")
         
     def automated_measurement(self):
         """Runs the full spectrometer measurement process."""

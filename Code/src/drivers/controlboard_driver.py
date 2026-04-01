@@ -80,11 +80,33 @@ class ControlBoard():
             pass
 
     def reset_kill(self):
-        """Clear the internal kill state so operations can resume."""
+        """Clear the internal kill state so operations can resume.
+
+        Sends a firmware reset (`M999`) followed by a settings reload (`M501`) if
+        the board is connected. Clears internal events so waiting loops can run
+        again.
+        """
         try:
             self._kill_event.clear()
-            self.received_ok.clear()
+            # Clear any previous ok marker
+            try:
+                self.received_ok.clear()
+            except Exception:
+                pass
             self.logger.debug("Control board kill state cleared")
+
+            # If connected, attempt to restart firmware and reload settings
+            if self.is_connected():
+                try:
+                    # Request firmware restart to clear M112 state
+                    self.logger.info("Sending firmware reset (M999) to control board")
+                    self.send_message("M999")
+                    sleep(0.5)
+                    # Reload stored settings
+                    self.send_message("M501")
+                    sleep(0.2)
+                except Exception as e:
+                    self.logger.exception(f"Failed to send firmware reset commands: {e}")
         except Exception:
             self.logger.exception("Failed to clear control board kill state")
         
