@@ -243,6 +243,8 @@ class MoveRegistry():
         return
     #  --------- HOTPLATE MOVES --------
     def set_temperature(self, temperature_c: int):
+        if not self.hotplate or not self.hotplate.is_connected():
+            raise Exception("Hotplate not connected")
         self.hotplate.set_temperature(temperature_c)
     
     def wait_for_temperature(self, target_temperature: int, threshold: int):
@@ -259,7 +261,10 @@ class MoveRegistry():
         rrelative = False
         if relative >= 1:
             rrelative = True
-        
+        # Ensure control board is available before attempting moves
+        if not getattr(self, 'control_board', None) or not self.control_board.is_connected():
+            raise Exception("Control board not connected")
+
         self.toolhead.move_axis("X", x, relative=rrelative)
         self.toolhead.move_axis("Y", y, relative=rrelative)
         self.toolhead.move_axis("Z", z, relative=rrelative)
@@ -292,6 +297,8 @@ class MoveRegistry():
         self.spin_coater.add_step(rpm, spin_time_seconds)
         
     def run_spin_coater(self):
+        if not self.spin_coater or not self.spin_coater.is_connected():
+            raise Exception("Spin coater not connected")
         self.spin_coater.run(wait_to_finish=True)
     
     # --------- GRIPPER MOVES --------
@@ -562,9 +569,8 @@ class MoveRegistry():
         Args:
             measurement_type (str): Label for the measurement (e.g., 'Background', 'Reference', 'Sample')
         """
-        if not self.spectrometer:
-            self.logger.error("Spectrometer is not initialized.")
-            return
+        if not self.spectrometer or not self.spectrometer.is_connected():
+            raise Exception("Spectrometer is not connected")
 
         self.logger.info(f"Starting spectrometer measurement: {measurement_type}")
 

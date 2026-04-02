@@ -39,7 +39,8 @@ class ControlBoard():
             self.logger.error("Control board is already connected")
         port = "/dev/control_board"
         try:
-            self.serial = serial.Serial(port, 115200, timeout=None)
+            # Use a finite timeout so reads don't block forever and freeze the app
+            self.serial = serial.Serial(port, 115200, timeout=1.0)
             self._begin_reader_thread()
             self.send_message("M501")
             self.logger.info(f"Connected to control board on port {port}")
@@ -91,7 +92,7 @@ class ControlBoard():
         try:
             if self.is_connected():
                 # best-effort; do not block here
-                # self.send_message("M114")
+                self.send_message("M114")
         except Exception:
             self.logger.exception("Failed to request position from control board")
 
@@ -171,13 +172,17 @@ class ControlBoard():
             self.logger.error("Reader thread is not running")
             return
 
+        # preserve the original short command for selective logging
+        original_cmd = message.strip()
         if '\r\n' not in message:
             message += "\r\n"
         try:
             # If a kill was requested, still attempt to send the emergency stop command,
             # otherwise write normally and log any serial errors.
             self.reader_thread.write(message.encode("utf-8"))
-            self.logger.debug(f"Sending message: {message}")
+            # Don't log M114 requests to avoid spamming the console with position-requests
+            if not original_cmd.upper().startswith("M114"):
+                self.logger.debug(f"Sending message: {message}")
         except Exception as e:
             self.logger.exception(f"Failed to send message '{message}': {e}")
         
@@ -272,24 +277,29 @@ class ControlBoardLineReader(serial.threaded.LineReader):
     def handle_line(self, line):
         """Process each received line."""
         line = line.strip()
-        #self.logger.debug(f"Received: {line}")
 
-        # check if we receive position data (e.g., 'X:.. Y:.. Z:..')
-        received_position_data = True
-        for prefix in self.POSITION_PREFIXS:
-            if prefix not in line:
-                received_position_data = False
-                self.logger.debug(f"Received: {line}")
-                break
+        if not line:
+            return
 
+        # Ignore echoed M114 commands (some firmware echo commands back)
+        if line.upper().startswith("M114"):
+            return
+
+        # Handle OK message used to mark move completion
         if line == "ok":
-            self.control_board.received_ok.set()  # Set the event when "ok" is received
-        elif received_position_data:
-            # Delegate parsing to the control board to update positions thread-safely
+            self.control_board.received_ok.set()
+            return
+
+        # If any position prefix is present, treat as a position update
+        if any(prefix in line for prefix in self.POSITION_PREFIXS):
             try:
                 self.control_board._update_positions_from_line(line)
             except Exception:
                 self.logger.exception("Failed to update positions from line")
+            return
+
+        # Fallback: log other informational lines at debug level
+        self.logger.debug(f"Received: {line}")
             
     def connection_lost(self, exc):
         """Handle the loss of connection."""

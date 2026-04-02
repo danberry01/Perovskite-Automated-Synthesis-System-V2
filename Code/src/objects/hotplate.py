@@ -25,7 +25,8 @@ class Hotplate(threading.Thread):
         
         port = "/dev/hotplate"
         try:
-            self.serial = serial.Serial(port, 115200, timeout=None)
+            # Use a finite timeout so that reads do not block forever
+            self.serial = serial.Serial(port, 115200, timeout=1.0)
             self.logger.info(f"Connected to hotplate on port {port}")
         except serial.SerialException as e:
             self.logger.error(f"Error connecting to hotplate: {e}")
