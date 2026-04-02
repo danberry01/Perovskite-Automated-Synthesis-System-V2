@@ -265,9 +265,8 @@ class MoveRegistry():
         if not getattr(self, 'control_board', None) or not self.control_board.is_connected():
             raise Exception("Control board not connected")
 
-        self.toolhead.move_axis("X", x, relative=rrelative)
-        self.toolhead.move_axis("Y", y, relative=rrelative)
-        self.toolhead.move_axis("Z", z, relative=rrelative)
+        # Use a coordinated multi-axis move to avoid mode/ordering issues
+        self.toolhead.move_to(x=x, y=y, z=z, relative= rrelative, feedrate=1000)
         
     def move_to_location(self, destination: str):
         self.validate_location(destination)

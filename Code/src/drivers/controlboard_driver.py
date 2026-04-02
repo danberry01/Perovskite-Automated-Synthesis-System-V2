@@ -198,9 +198,12 @@ class ControlBoard():
         if getattr(self, '_kill_event', None) is not None and self._kill_event.is_set():
             self.logger.warning("Move aborted: control board in kill state")
             raise RuntimeError("ControlBoard is in kill state")
-        
+        # Ensure positioning mode is explicitly set for this move so the
+        # firmware interprets the coordinate correctly.
         if relative:
             self.send_message("G91")
+        else:
+            self.send_message("G90")
         sleep(0.1)
         # dont go crazy with these axes,
         if (axis == "Z" or axis == "A" or axis == "B") and feedrate_mm_per_minute == 2000:
@@ -213,6 +216,8 @@ class ControlBoard():
         if finish_move:
             self.finish_moves()
             sleep(0.1)
+        # If we issued a relative move, revert to absolute positioning to
+        # keep behavior consistent with previous code.
         if relative:
             self.send_message("G90")
             sleep(0.1)
