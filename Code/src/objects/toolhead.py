@@ -13,7 +13,11 @@ class Toolhead():
         self.control_board.move_axis(axis, distance_mm, 1000, relative=relative, finish_move=finish_move)
         
     def get_position(self, axis):
-        return self.control_board.positions[axis]
+        # Use control board's thread-safe getter
+        try:
+            return self.control_board.get_position(axis)
+        except Exception:
+            return None
     
     def home(self):
         self.control_board.send_message("G28 Z")

@@ -1,6 +1,7 @@
 from queue import Queue
 import logging
 import threading
+import time
 from time import sleep
 import serial
 import serial.threaded
@@ -29,6 +30,8 @@ class ControlBoard():
         self.relative_positioning_enabled = False
         # Internal event used to signal an emergency stop / kill
         self._kill_event = threading.Event()
+        # Lock to protect concurrent access to positions
+        self._positions_lock = threading.Lock()
 
     def connect(self):
         """Connect to the control board and start the reader thread."""
@@ -78,6 +81,41 @@ class ControlBoard():
             self.received_ok.set()
         except Exception:
             pass
+
+    def request_position(self):
+        """Request the control board to report its current position (M114).
+
+        The board's reader thread will pick up the response and update
+        `self.positions`.
+        """
+        try:
+            if self.is_connected():
+                # best-effort; do not block here
+                self.send_message("M114")
+        except Exception:
+            self.logger.exception("Failed to request position from control board")
+
+    def get_position(self, axis: str):
+        """Thread-safe getter for axis position."""
+        with self._positions_lock:
+            return self.positions.get(axis)
+
+    def _update_positions_from_line(self, line: str):
+        """Parse a status line containing X:,Y:,Z: etc and update positions."""
+        try:
+            # Expect lines like: 'X:0.00 Y:0.00 Z:0.00 A:0.00 B:0.00'
+            for substr, key in zip(ControlBoardLineReader.POSITION_PREFIXS, self.positions):
+                if substr in line:
+                    try:
+                        number = (line.split(substr)[1]).split(" ")[0]
+                        val = float(number)
+                        with self._positions_lock:
+                            self.positions[key] = val
+                    except Exception:
+                        # ignore parse errors for individual values
+                        pass
+        except Exception:
+            self.logger.exception("Failed to parse position line")
 
     def reset_kill(self):
         """Clear the internal kill state so operations can resume.
@@ -193,12 +231,24 @@ class ControlBoard():
         # Wait in small increments so we can be interrupted by a kill event
         timeout = 120.0
         poll_interval = 0.1
+        request_interval = 0.5
         waited = 0.0
+        last_request = time.time()
         while waited < timeout:
             # If a kill has been requested, break out early
             if getattr(self, '_kill_event', None) is not None and self._kill_event.is_set():
                 self.logger.info("Finish moves interrupted by kill")
                 break
+
+            # Periodically request position updates so UI can show current coords
+            now = time.time()
+            if now - last_request >= request_interval:
+                try:
+                    self.request_position()
+                except Exception:
+                    pass
+                last_request = now
+
             if self.received_ok.wait(timeout=poll_interval):
                 break
             waited += poll_interval
@@ -223,23 +273,23 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         """Process each received line."""
         line = line.strip()
         #self.logger.debug(f"Received: {line}")
-        
-        #check if we recieve position data
-        #logging is inside so we dont send positions in the debug console to avoid clutter
+
+        # check if we receive position data (e.g., 'X:.. Y:.. Z:..')
         received_position_data = True
         for prefix in self.POSITION_PREFIXS:
             if prefix not in line:
                 received_position_data = False
                 self.logger.debug(f"Received: {line}")
                 break
-                
+
         if line == "ok":
-            self.control_board.received_ok.set()  # Set the event when "DONE" is received
+            self.control_board.received_ok.set()  # Set the event when "ok" is received
         elif received_position_data:
-            for substr, key in zip(self.POSITION_PREFIXS, self.control_board.positions):
-                # extract the number that comes after the prefix and before the next space
-                number = (line.split(substr)[1]).split(" ")[0]
-                self.control_board.positions[key] = float(number)
+            # Delegate parsing to the control board to update positions thread-safely
+            try:
+                self.control_board._update_positions_from_line(line)
+            except Exception:
+                self.logger.exception("Failed to update positions from line")
             
     def connection_lost(self, exc):
         """Handle the loss of connection."""
