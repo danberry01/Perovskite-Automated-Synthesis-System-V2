@@ -4,7 +4,6 @@ from ...components.constants import *
 from .camera_frame import CameraFrame
 from .spectrometer_frame import SpectrometerFrame
 from .procedure_queue_frame import ProcedureQueueFrame
-from .console_frame import ConsoleFrame
 
 class ProcedureViewerFrame(ctk.CTkFrame):
     """Frame to display current state of procedure"""
@@ -30,9 +29,6 @@ class ProcedureViewerFrame(ctk.CTkFrame):
         
         self.camera_frame = CameraFrame(master = self, dispatcher = self.dispatcher)
         self.camera_frame.grid(row = 0, column = 1, padx = 10, pady = 10, sticky = "nsew")
-
-        self.console_frame = ConsoleFrame(master = self)
-        self.console_frame.grid(row = 1, column = 1, padx = 10, pady = 10, sticky = "nsew")
         
         self.spectrometer_frame = SpectrometerFrame(master = self)
         self.spectrometer_frame.grid(row = 1, column = 0, padx = 10, pady = 10, sticky = "nsew")
@@ -40,9 +36,7 @@ class ProcedureViewerFrame(ctk.CTkFrame):
     def pause_updates(self):
         """Pause all update loops in this frame"""
         self.camera_frame.pause_video_feed()
-        self.console_frame.pause_update()
     
     def resume_updates(self):
         """Resume all update loops in this frame"""
         self.camera_frame.resume_video_feed()
-        self.console_frame.resume_update()

@@ -60,6 +60,7 @@ class ConsoleFrame(ctk.CTkFrame):
         self.console.grid(row=1, column=0, columnspan = 2, padx=20, pady=10, sticky="nsew")
         
         self.console.tag_config("DEBUG", foreground="#8df564")
+        self.console.tag_config("INFO", foreground="white")
         self.console.tag_config("WARNING", foreground="#e4f089")
         self.console.tag_config("ERROR", foreground="red")
         self.console.tag_config("CAMERA", foreground="#00bfff")  # Deep sky blue for camera/marker updates

@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import os
 import logging
+import tkinter as tk
 from time import sleep
 from .components.constants import *
 from .frames import *
@@ -38,20 +39,27 @@ class App(ctk.CTk):
         )
         self.tab_manager_frame.grid(row = 0, column = 0, rowspan = 2, padx = 0, pady = 0, sticky = "nsew")
         
+        # Use a vertical PanedWindow so the user can drag the boundary between
+        # the main tab view and the info/console area. The PanedWindow spans
+        # the same grid area previously occupied by tab_view_frame + info_frame.
+        self._right_pane = tk.PanedWindow(self, orient=tk.VERTICAL)
+        self._right_pane.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=0, pady=0)
+
         self.tab_view_frame = TabViewFrame(
-            master = self, 
+            master = self._right_pane, 
             controller = self, 
             dispatcher = self.dispatcher, 
             move_registry = self.move_registry, 
             procedure_handler = self.procedure_handler
         )
-        self.tab_view_frame.grid(row = 0, column = 1, padx = 0, pady = 0, sticky = "nsew")
+        # Add the tab view and info frame to the paned window so the sash can be dragged
+        self._right_pane.add(self.tab_view_frame)
 
         self.info_frame = InfoFrame(
-            master = self,
+            master = self._right_pane,
             controller = self
         )
-        self.info_frame.grid(row = 1, column = 1, padx = 0, pady = 0, sticky = "nsew")
+        self._right_pane.add(self.info_frame)
 
         # Ensure application performs driver cleanup on window close
         try:
