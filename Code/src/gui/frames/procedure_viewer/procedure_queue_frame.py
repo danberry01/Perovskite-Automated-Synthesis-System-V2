@@ -209,7 +209,13 @@ class ProcedureQueueFrame(ctk.CTkFrame):
 
     def _kill_procedure(self):
         self.killed = True
-        self.procedure_handler.kill()
+        # Run kill in background to avoid blocking the UI if hardware calls block
+        try:
+            import threading as _threading
+            t = _threading.Thread(target=self.procedure_handler.kill, daemon=True)
+            t.start()
+        except Exception:
+            self.procedure_handler.kill()
 
     # -------------------------
     # IMPORT

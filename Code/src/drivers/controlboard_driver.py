@@ -30,6 +30,8 @@ class ControlBoard():
         self.relative_positioning_enabled = False
         # Internal event used to signal an emergency stop / kill
         self._kill_event = threading.Event()
+        # Lock to serialize writes to the serial port and avoid interleaved bytes
+        self._write_lock = threading.Lock()
         # Lock to protect concurrent access to positions
         self._positions_lock = threading.Lock()
 
@@ -176,15 +178,34 @@ class ControlBoard():
         original_cmd = message.strip()
         if '\r\n' not in message:
             message += "\r\n"
+
+        # Serialize writes to avoid interleaving bytes from concurrent threads
+        acquired = False
         try:
-            # If a kill was requested, still attempt to send the emergency stop command,
-            # otherwise write normally and log any serial errors.
-            self.reader_thread.write(message.encode("utf-8"))
-            # Don't log M114 requests to avoid spamming the console with position-requests
-            if not original_cmd.upper().startswith("M114"):
-                self.logger.debug(f"Sending message: {message}")
-        except Exception as e:
-            self.logger.exception(f"Failed to send message '{message}': {e}")
+            try:
+                acquired = self._write_lock.acquire(timeout=0.5)
+            except Exception:
+                acquired = False
+
+            if not acquired:
+                # If we can't acquire the lock quickly, log and skip to avoid blocking UI
+                self.logger.warning(f"Timed out waiting for serial write lock; skipping send: {original_cmd}")
+                return
+
+            try:
+                # write via the reader thread's write helper
+                self.reader_thread.write(message.encode("utf-8"))
+                # Don't log M114 requests to avoid spamming the console with position-requests
+                if not original_cmd.upper().startswith("M114"):
+                    self.logger.debug(f"Sending message: {message}")
+            except Exception as e:
+                self.logger.exception(f"Failed to send message '{message}': {e}")
+        finally:
+            if acquired:
+                try:
+                    self._write_lock.release()
+                except Exception:
+                    pass
         
     def move_axis(self, axis: str, distance_mm: float, feedrate_mm_per_minute: int = 2000, relative: bool = False, finish_move: bool = True):
         """ Takes in a list of axes, distances and speeds to move the gantry"""
@@ -303,8 +324,12 @@ class ControlBoardLineReader(serial.threaded.LineReader):
                 self.logger.exception("Failed to update positions from line")
             return
 
-        # Fallback: log other informational lines at debug level
-        self.logger.debug(f"Received: {line}")
+        # Fallback: log other informational lines
+        # Treat firmware error responses as warnings so they are visible
+        if line.lower().startswith("error") or "unknown message" in line.lower():
+            self.logger.warning(f"Firmware: {line}")
+        else:
+            self.logger.debug(f"Received: {line}")
             
     def connection_lost(self, exc):
         """Handle the loss of connection."""
