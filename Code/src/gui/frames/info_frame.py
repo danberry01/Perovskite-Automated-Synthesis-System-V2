@@ -25,7 +25,7 @@ class InfoFrame(ctk.CTkFrame):
 
         # Status frame in the top-right of this InfoFrame
         self.status_frame = ctk.CTkFrame(master=self, fg_color=FOREGROUND_COLOR_TWO)
-        self.status_frame.grid(row=0, column=0, sticky="ne", padx=10, pady=6)
+        self.status_frame.grid(row=0, column=1, sticky="ne", padx=10, pady=6)
 
         # Position labels (X Y Z) grouped to the right
         self.pos_label = ctk.CTkLabel(self.status_frame, text="X: --  Y: --  Z: --", anchor="e",
@@ -44,7 +44,7 @@ class InfoFrame(ctk.CTkFrame):
 
         # Console placed in the bottom area
         self.console_frame = ConsoleFrame(master=self)
-        self.console_frame.grid(row=1, column=0, sticky="nsew")
+        self.console_frame.grid(row=0, column=0, sticky="nsew")
 
         # Start periodic update loop
         try:
