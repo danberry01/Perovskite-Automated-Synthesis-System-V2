@@ -91,7 +91,7 @@ class ControlBoard():
         try:
             if self.is_connected():
                 # best-effort; do not block here
-                self.send_message("M114")
+                # self.send_message("M114")
         except Exception:
             self.logger.exception("Failed to request position from control board")
 
