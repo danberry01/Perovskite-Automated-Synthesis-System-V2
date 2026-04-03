@@ -20,10 +20,13 @@ class Toolhead():
             return None
     
     def home(self):
-        # Ensure homing commands are sent reliably
-        self.control_board.send_message("G28 Z", require_lock=True)
-        self.control_board.send_message("G28 Y", require_lock=True)
-        self.control_board.send_message("G28 X", require_lock=True)
+        # Home all axes and wait for completion
+        self.control_board.send_message("G28 X Y Z", require_lock=True)
+        try:
+            self.control_board.finish_moves()
+        except Exception:
+            # Don't fail hard if finish wait has issues; caller can handle
+            pass
 
     def move_to(self, x: float = None, y: float = None, z: float = None, relative: bool = False, feedrate: int = 1000):
         """Move multiple axes in a single coordinated command.

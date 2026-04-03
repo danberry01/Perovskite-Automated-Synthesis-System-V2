@@ -35,6 +35,8 @@ class ControlBoard():
         self._write_lock = threading.Lock()
         # Lock to protect concurrent access to positions
         self._positions_lock = threading.Lock()
+        # Optional raw serial logging handle (opened by enable_raw_logging)
+        self._raw_log_handle = None
 
     def connect(self):
         """Connect to the control board and start the reader thread."""
@@ -54,6 +56,16 @@ class ControlBoard():
         if not self.is_connected():
             return
         self.serial.close()
+        # Close raw log handle if open
+        try:
+            if getattr(self, '_raw_log_handle', None):
+                try:
+                    self._raw_log_handle.close()
+                except Exception:
+                    pass
+                self._raw_log_handle = None
+        except Exception:
+            pass
         self.logger.debug("Control Board Disconnected")
             
     def is_connected(self) -> bool:
@@ -98,6 +110,35 @@ class ControlBoard():
                 self.send_message("M114")
         except Exception:
             self.logger.exception("Failed to request position from control board")
+
+    def enable_raw_logging(self, file_path: str):
+        """Enable appending raw incoming serial lines to `file_path` for debugging."""
+        try:
+            # Line-buffered so logs appear promptly
+            self._raw_log_handle = open(file_path, "a", buffering=1, encoding="utf-8")
+        except Exception as e:
+            self.logger.exception(f"Failed to open raw log file {file_path}: {e}")
+
+    def disable_raw_logging(self):
+        try:
+            if self._raw_log_handle:
+                try:
+                    self._raw_log_handle.close()
+                except Exception:
+                    pass
+                self._raw_log_handle = None
+        except Exception:
+            pass
+
+    def _maybe_log_raw_line(self, line: str):
+        try:
+            if getattr(self, '_raw_log_handle', None):
+                try:
+                    self._raw_log_handle.write(line + "\n")
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def get_position(self, axis: str):
         """Thread-safe getter for axis position."""
@@ -184,16 +225,15 @@ class ControlBoard():
         # Serialize writes to avoid interleaving bytes from concurrent threads
         acquired = False
         try:
-            # Critical messages should block longer to ensure they get sent
             if require_lock:
+                # For required messages we block until the lock is available so
+                # the command is reliably sent rather than being silently skipped.
                 try:
-                    acquired = self._write_lock.acquire(timeout=5.0)
+                    self._write_lock.acquire()
+                    acquired = True
                 except Exception:
                     acquired = False
-                if not acquired:
-                    # For required messages, raise so callers can decide how to handle
-                    self.logger.error(f"Timed out waiting for serial write lock for required send: {original_cmd}")
-                    raise RuntimeError("Failed to acquire serial write lock for required message")
+                    self.logger.error(f"Failed to acquire serial write lock for required send: {original_cmd}")
             else:
                 try:
                     acquired = self._write_lock.acquire(timeout=timeout)
@@ -317,6 +357,13 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         """Process each received line."""
         line = line.strip()
 
+        # Write raw line to debug file if enabled
+        try:
+            # keep raw logging lightweight and non-blocking
+            self.control_board._maybe_log_raw_line(line)
+        except Exception:
+            pass
+
         if not line:
             return
 
@@ -326,12 +373,19 @@ class ControlBoardLineReader(serial.threaded.LineReader):
 
         # If any position prefix is present, treat as a position update.
         # Do this before handling the OK token so lines like 'ok X:... Y:...' get
-        # their positions recorded as well as signalling completion.
+        # their positions recorded as well as signalling completion. After
+        # updating positions we return so these status lines are not repeatedly
+        # logged to the console. If the same line also contains 'ok' we mark
+        # completion before returning.
         if any(prefix in line for prefix in self.POSITION_PREFIXS):
             try:
                 self.control_board._update_positions_from_line(line)
             except Exception:
                 self.logger.exception("Failed to update positions from line")
+            # If firmware also returned an 'ok' token in the same line, set it.
+            if line.lower().startswith("ok"):
+                self.control_board.received_ok.set()
+            return
 
         # Handle OK message used to mark move completion (case-insensitive).
         # Accept lines that start with 'ok' (firmware may append extra text).

@@ -51,7 +51,11 @@ class PipetteHandler():
             return None
         
     def home(self):
-        self.control_board.send_message("G28 B")
+        self.control_board.send_message("G28 B", require_lock=True)
+        try:
+            self.control_board.finish_moves()
+        except Exception:
+            pass
         
     def set_actuator_position(self, position_mm):
         

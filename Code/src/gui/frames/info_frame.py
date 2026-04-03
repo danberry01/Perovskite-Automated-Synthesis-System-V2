@@ -116,6 +116,8 @@ class InfoFrame(ctk.CTkFrame):
         finally:
             # Schedule next update
             try:
-                self._after_id = self.after(300, self._update_loop)
+                # Reduce polling frequency to avoid flooding the console with
+                # frequent M114 requests; 1000ms is sufficient for UI updates.
+                self._after_id = self.after(1000, self._update_loop)
             except Exception:
                 pass
