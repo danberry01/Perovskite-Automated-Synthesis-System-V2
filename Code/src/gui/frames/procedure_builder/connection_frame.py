@@ -2,6 +2,8 @@ import customtkinter as ctk
 from PIL import Image
 import sys
 import os
+import threading
+import logging
 
 from ...components.constants import *
 
@@ -121,6 +123,58 @@ class ConnectionFrame(ctk.CTkFrame):
         
         self._update()
 
+        # Best-effort auto-connect on creation (non-blocking)
+        try:
+            threading.Thread(target=self._auto_connect_on_startup, daemon=True).start()
+        except Exception:
+            logging.getLogger("Main Logger").exception("Failed to start auto-connect thread for ConnectionFrame")
+
+    def _auto_connect_on_startup(self):
+        """Attempt to connect to available devices on startup in background.
+
+        This is best-effort and will not raise; it updates individual
+        connection widgets via the existing set_connection_status calls.
+        """
+        logger = logging.getLogger("Main Logger")
+        try:
+            # Try control board first (most critical)
+            try:
+                self.control_board.connect()
+            except Exception as e:
+                logger.debug(f"Control board auto-connect attempt raised: {e}")
+            self.control_board_connection.set_connection_status(self.control_board.is_connected())
+
+            # Try the spin coater
+            try:
+                self.spin_coater.connect()
+            except Exception as e:
+                logger.debug(f"Spin coater auto-connect attempt raised: {e}")
+            self.spin_coater_connection.set_connection_status(self.spin_coater.is_connected())
+
+            # Try hotplate
+            try:
+                self.hotplate.connect()
+            except Exception as e:
+                logger.debug(f"Hotplate auto-connect attempt raised: {e}")
+            self.hotplate_connection.set_connection_status(self.hotplate.is_connected())
+
+            # Try spectrometer
+            try:
+                self.spectrometer.connect()
+            except Exception as e:
+                logger.debug(f"Spectrometer auto-connect attempt raised: {e}")
+            self.spectrometer_connection.set_connection_status(self.spectrometer.is_connected())
+
+            # Try camera via dispatcher helper
+            try:
+                self.dispatcher.connect_camera()
+            except Exception as e:
+                logger.debug(f"Camera auto-connect attempt raised: {e}")
+            self.camera_connection.set_connection_status(self.camera.is_connected())
+
+        except Exception:
+            logger.exception("Error during auto-connect startup sequence")
+
     def _update(self):
         self.control_board_connection.set_connection_status(self.control_board.is_connected())
         self.spin_coater_connection.set_connection_status(self.spin_coater.is_connected())
@@ -131,23 +185,87 @@ class ConnectionFrame(ctk.CTkFrame):
         self.after(1000, self._update)
 
     def _connect_control_board(self):
-        self.control_board.connect()
-        self.control_board_connection.set_connection_status(True)
+        # Run connection in background to avoid UI freeze and handle errors
+        def _task():
+            logger = logging.getLogger("Main Logger")
+            try:
+                self.control_board.connect()
+                ok = self.control_board.is_connected()
+                self.control_board_connection.set_connection_status(ok)
+                if not ok:
+                    logger.warning("Control board auto-connect reported not connected")
+            except Exception as e:
+                logger.exception(f"Error connecting control board: {e}")
+                try:
+                    self.control_board.disconnect()
+                except Exception:
+                    pass
+                self.control_board_connection.set_connection_status(False)
+
+        threading.Thread(target=_task, daemon=True).start()
     
     def _connect_spin_coater(self):
-        self.spin_coater.connect()
-        self.spin_coater_connection.set_connection_status(True)
+        def _task():
+            logger = logging.getLogger("Main Logger")
+            try:
+                self.spin_coater.connect()
+                self.spin_coater_connection.set_connection_status(self.spin_coater.is_connected())
+            except Exception as e:
+                logger.exception(f"Error connecting spin coater: {e}")
+                try:
+                    self.spin_coater.disconnect()
+                except Exception:
+                    pass
+                self.spin_coater_connection.set_connection_status(False)
+
+        threading.Thread(target=_task, daemon=True).start()
         
     def _connect_hotplate(self):
-        self.hotplate.connect()
-        self.hotplate_connection.set_connection_status(True)
+        def _task():
+            logger = logging.getLogger("Main Logger")
+            try:
+                self.hotplate.connect()
+                self.hotplate_connection.set_connection_status(self.hotplate.is_connected())
+            except Exception as e:
+                logger.exception(f"Error connecting hotplate: {e}")
+                try:
+                    self.hotplate.disconnect()
+                except Exception:
+                    pass
+                self.hotplate_connection.set_connection_status(False)
+
+        threading.Thread(target=_task, daemon=True).start()
         
     def _connect_spectrometer(self):
-        self.spectrometer.connect()
-        self.spectrometer_connection.set_connection_status(True)
+        def _task():
+            logger = logging.getLogger("Main Logger")
+            try:
+                self.spectrometer.connect()
+                self.spectrometer_connection.set_connection_status(self.spectrometer.is_connected())
+            except Exception as e:
+                logger.exception(f"Error connecting spectrometer: {e}")
+                try:
+                    self.spectrometer.disconnect()
+                except Exception:
+                    pass
+                self.spectrometer_connection.set_connection_status(False)
+
+        threading.Thread(target=_task, daemon=True).start()
         
     def _connect_camera(self):
-        self.dispatcher.connect_camera()
+        # Dispatcher provides a wrapper and callback notification - run in background
+        def _task():
+            logger = logging.getLogger("Main Logger")
+            try:
+                self.dispatcher.connect_camera()
+            except Exception as e:
+                logger.exception(f"Error connecting camera: {e}")
+                try:
+                    self.camera.disconnect()
+                except Exception:
+                    pass
+
+        threading.Thread(target=_task, daemon=True).start()
         
     def _on_camera_connection_changed(self, is_connected: bool):
         """Callback when camera connection state changes (called from either button)"""
@@ -162,15 +280,50 @@ class ConnectionFrame(ctk.CTkFrame):
         
         if value == "":
             return
-        
-        if self.command_destination == "Control Board":
-            self.control_board.send_message(value)
-        elif self.command_destination == "Spincoater":
-            self.spin_coater.send_message(value)
-        elif self.command_destination == "Spectrometer":
-            self.spectrometer.send_message(value)
-        elif self.command_destination == "Hotplate":
-            self.hotplate.send_message(value)
+        logger = logging.getLogger("Main Logger")
+        try:
+            if self.command_destination == "Control Board":
+                try:
+                    self.control_board.send_message(value)
+                except Exception as e:
+                    logger.exception(f"Failed to send to control board: {e}")
+                    try:
+                        self.control_board.disconnect()
+                    except Exception:
+                        pass
+                    self.control_board_connection.set_connection_status(False)
+            elif self.command_destination == "Spincoater":
+                try:
+                    self.spin_coater.send_message(value)
+                except Exception as e:
+                    logger.exception(f"Failed to send to spin coater: {e}")
+                    try:
+                        self.spin_coater.disconnect()
+                    except Exception:
+                        pass
+                    self.spin_coater_connection.set_connection_status(False)
+            elif self.command_destination == "Spectrometer":
+                try:
+                    self.spectrometer.send_message(value)
+                except Exception as e:
+                    logger.exception(f"Failed to send to spectrometer: {e}")
+                    try:
+                        self.spectrometer.disconnect()
+                    except Exception:
+                        pass
+                    self.spectrometer_connection.set_connection_status(False)
+            elif self.command_destination == "Hotplate":
+                try:
+                    self.hotplate.send_message(value)
+                except Exception as e:
+                    logger.exception(f"Failed to send to hotplate: {e}")
+                    try:
+                        self.hotplate.disconnect()
+                    except Exception:
+                        pass
+                    self.hotplate_connection.set_connection_status(False)
+        except Exception:
+            logger.exception("Unexpected error in _send_entry")
     
     def destroy(self):
         """Clean up callbacks when frame is destroyed"""

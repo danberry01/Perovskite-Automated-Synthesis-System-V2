@@ -5,6 +5,7 @@ import tkinter as tk
 from time import sleep
 from .components.constants import *
 from .frames import *
+from .frames.splash_frame import SplashFrame
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
@@ -67,6 +68,19 @@ class App(ctk.CTk):
         except Exception:
             # protocol may not be available in some environments; ignore if so
             pass
+
+        # Show splashscreen on startup (covers the UI). The splash
+        # attempts a background auto-connect and prompts to home.
+        try:
+            self.splash = SplashFrame(master=self, dispatcher=self.dispatcher, move_registry=self.move_registry, controller=self)
+            # place to cover entire window and bring to front
+            self.splash.place(relx=0, rely=0, relwidth=1, relheight=1)
+            try:
+                self.splash.lift()
+            except Exception:
+                pass
+        except Exception:
+            logging.getLogger("Main Logger").exception("Failed to create splash frame")
 
     def _on_closing(self):
         """Run cleanup in a background thread so the GUI can close immediately.
