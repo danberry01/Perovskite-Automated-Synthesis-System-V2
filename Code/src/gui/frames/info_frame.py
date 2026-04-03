@@ -42,6 +42,14 @@ class InfoFrame(ctk.CTkFrame):
         self.progress.set(0.0)
         self.progress.grid(row=2, column=0, sticky="ne", pady=(6, 0))
 
+        # Hotplate temperature label
+        self.hotplate_label = ctk.CTkLabel(self.status_frame, text="Hotplate: --/--", anchor="e", font=("Arial", 12))
+        self.hotplate_label.grid(row=3, column=0, sticky="ne")
+
+        # Spincoater status label
+        self.spincoater_label = ctk.CTkLabel(self.status_frame, text="Spincoater: Disconnected | RPM: --", anchor="e", font=("Arial", 12))
+        self.spincoater_label.grid(row=4, column=0, sticky="ne")
+
         # Console placed in the bottom area
         self.console_frame = ConsoleFrame(master=self)
         self.console_frame.grid(row=0, column=0, sticky="nsew")
@@ -109,6 +117,51 @@ class InfoFrame(ctk.CTkFrame):
                     pass
             except Exception:
                 logging.getLogger("Main Logger").exception("Error updating procedure info")
+
+            # Update hotplate and spincoater statuses
+            try:
+                hp = getattr(self.move_registry, 'hotplate', None)
+                if hp is not None:
+                    current_temperature = getattr(hp, 'current_temperature_c', '--')
+                    target_temperature = getattr(hp, 'target_temperature_c', '--')
+                    try:
+                        hp_status = "Connected" if (hasattr(hp, 'is_connected') and hp.is_connected()) else "Disconnected"
+                    except Exception:
+                        hp_status = "Connected" if getattr(hp, 'serial', None) else "Disconnected"
+                    try:
+                        self.hotplate_label.configure(text=f"Hotplate: {current_temperature}/{target_temperature} °C ({hp_status})")
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        self.hotplate_label.configure(text="Hotplate: --/--")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            try:
+                sc = getattr(self.move_registry, 'spin_coater', None)
+                if sc is not None:
+                    try:
+                        sc_status = "Connected" if sc.is_connected() else "Disconnected"
+                    except Exception:
+                        sc_status = "Connected" if getattr(sc, 'serial', None) else "Disconnected"
+                    is_running = getattr(sc, 'is_running', False)
+                    rpm = getattr(sc, 'last_rpm', None)
+                    rpm_text = str(rpm) if rpm is not None else "N/A"
+                    running_text = "Running" if is_running else "Idle"
+                    try:
+                        self.spincoater_label.configure(text=f"Spincoater: {sc_status} | {running_text} | RPM: {rpm_text}")
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        self.spincoater_label.configure(text="Spincoater: Disconnected | RPM: --")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
         finally:
             # Schedule next update

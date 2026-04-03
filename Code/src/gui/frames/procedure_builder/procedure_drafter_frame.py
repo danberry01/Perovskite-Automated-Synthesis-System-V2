@@ -280,7 +280,7 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         # Set the procedure in the handler
         if self.procedure_handler:
             self.procedure_handler.set_procedure(procedure)
-            
+
             # Update the queue frame display if available
             if self.queue_frame:
                 self.queue_frame._build_steps(procedure)
@@ -288,14 +288,30 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
                 self.queue_frame.current_procedure_label.configure(
                     text=f"Current Procedure: Quick Run - {len(procedure)} steps"
                 )
-            
+
+            # Switch to the procedure viewer tab so the user can observe the run
+            try:
+                parent = getattr(self, 'master', None)
+                # climb up the widget hierarchy to find a frame exposing goto_tab()
+                while parent is not None and not hasattr(parent, 'goto_tab'):
+                    parent = getattr(parent, 'master', None)
+                if parent is not None and hasattr(parent, 'goto_tab'):
+                    parent.goto_tab("procedure_viewer")
+                else:
+                    # fallback: try controller on the nearest ancestor
+                    app = getattr(self.master, 'controller', None) or getattr(getattr(self.master, 'master', None), 'controller', None)
+                    if app and hasattr(app, 'switch_tab'):
+                        app.switch_tab("procedure_viewer")
+            except Exception:
+                logging.getLogger("Main Logger").exception("Failed to switch to procedure viewer on quick run")
+
             # Start execution in a separate thread
             def run_procedure():
                 try:
                     self.procedure_handler.begin()
                 except Exception as e:
                     logging.getLogger("Main Logger").error(f"Error running procedure: {e}")
-            
+
             threading.Thread(target=run_procedure, daemon=True).start()
             logging.getLogger("Main Logger").info(f"Quick Run: Starting procedure with {len(procedure)} steps")
         else:

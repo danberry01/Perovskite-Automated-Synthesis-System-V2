@@ -85,7 +85,8 @@ class ConsoleFrame(ctk.CTkFrame):
                 self.log_queue.task_done()
                 self.console.see("end")
         
-        self._update_after_id = self.after(50, self._update)
+        # Lower update frequency to reduce CPU usage while still keeping console responsive
+        self._update_after_id = self.after(200, self._update)
     
     def pause_update(self):
         """Pause console updates to reduce CPU usage"""
