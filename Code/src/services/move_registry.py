@@ -257,7 +257,8 @@ class MoveRegistry():
 
     # --------- TOOLHEAD MOVES --------
     def move_toolhead(self, x: float, y: float, z: float, relative: int):
-        """Move the toolhead to the specified coordiantes """
+        """Move the toolhead to the specified coordinates (absolute or relative)"""
+        self.logger.info(f"move_toolhead: x={x}, y={y}, z={z}, relative={relative}")
         rrelative = False
         if relative >= 1:
             rrelative = True
@@ -265,8 +266,8 @@ class MoveRegistry():
         if not getattr(self, 'control_board', None) or not self.control_board.is_connected():
             raise Exception("Control board not connected")
 
-        # Use a coordinated multi-axis move to avoid mode/ordering issues
-        self.toolhead.move_to(x=x, y=y, z=z, relative= rrelative, feedrate=1000)
+        # Use per-axis moves for reliability
+        self.toolhead.move_to(x=x, y=y, z=z, relative=rrelative, feedrate=1000)
         
     def move_to_location(self, destination: str):
         self.validate_location(destination)
