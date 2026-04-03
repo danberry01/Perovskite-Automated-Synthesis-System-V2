@@ -39,36 +39,45 @@ class Toolhead():
             self.control_board.logger.exception("Homing X failed")
 
     def move_to(self, x: float = None, y: float = None, z: float = None, relative: bool = False, feedrate: int = 1000):
-        """Move multiple axes in a single coordinated command.
-
-        Provides a single `G0` with X/Y/Z to avoid per-axis mode/coordination issues.
+        """Move multiple axes using individual per-axis commands for reliability.
+        
+        Many firmware implementations don't handle multi-axis G0 reliably.
+        Instead, move each axis that was specified as a separate G0 command
+        to ensure each one completes before the next starts.
         """
-        # Build the coordinate components
-        parts = []
-        if x is not None:
-            parts.append(f"X{x}")
-        if y is not None:
-            parts.append(f"Y{y}")
-        if z is not None:
-            parts.append(f"Z{z}")
-
-        if not parts:
+        logger = self.control_board.logger
+        logger.info(f"move_to called: x={x}, y={y}, z={z}, relative={relative}, feedrate={feedrate}")
+        
+        # Check if we have any coordinates to move
+        has_move = x is not None or y is not None or z is not None
+        if not has_move:
+            logger.debug("move_to: no coordinates specified")
             return
-
-        # Ensure mode is explicit for the move (send reliably)
-        if relative:
-            self.control_board.send_message("G91", require_lock=True)
-        else:
-            self.control_board.send_message("G90", require_lock=True)
-
-        # Send combined move (send reliably)
-        cmd = "G0 " + " ".join(parts) + f" F{feedrate}"
-        self.control_board.send_message(cmd, require_lock=True)
-
-        # Wait for completion using control board's finishing logic
-        self.control_board.finish_moves()
-
-        # Revert to absolute mode after a relative move for consistent behavior
-        if relative:
-            self.control_board.send_message("G90", require_lock=True)
+        
+        # Move each axis individually for reliability. Typical order: Z for safety, then X, then Y.
+        # Z first so we don't collide with obstacles when moving X/Y.
+        # (move_axis will handle G90/G91 mode for each move)
+        if z is not None:
+            logger.info(f"Moving Z to {z} (absolute={not relative})")
+            self.move_axis("Z", z, feedrate_mm_per_minute=feedrate, relative=relative, finish_move=True)
+            z_actual = self.get_position("Z")
+            logger.info(f"Z move complete; reported position: {z_actual}")
+        
+        if x is not None:
+            logger.info(f"Moving X to {x} (absolute={not relative})")
+            self.move_axis("X", x, feedrate_mm_per_minute=feedrate, relative=relative, finish_move=True)
+            x_actual = self.get_position("X")
+            logger.info(f"X move complete; reported position: {x_actual}")
+        
+        if y is not None:
+            logger.info(f"Moving Y to {y} (absolute={not relative})")
+            self.move_axis("Y", y, feedrate_mm_per_minute=feedrate, relative=relative, finish_move=True)
+            y_actual = self.get_position("Y")
+            logger.info(f"Y move complete; reported position: {y_actual}")
+        
+        # Final position check
+        final_x = self.get_position("X")
+        final_y = self.get_position("Y")
+        final_z = self.get_position("Z")
+        logger.info(f"move_to complete; final position: X={final_x}, Y={final_y}, Z={final_z}")
 
