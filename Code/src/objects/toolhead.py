@@ -20,9 +20,10 @@ class Toolhead():
             return None
     
     def home(self):
-        self.control_board.send_message("G28 Z")
-        self.control_board.send_message("G28 Y")
-        self.control_board.send_message("G28 X")
+        # Ensure homing commands are sent reliably
+        self.control_board.send_message("G28 Z", require_lock=True)
+        self.control_board.send_message("G28 Y", require_lock=True)
+        self.control_board.send_message("G28 X", require_lock=True)
 
     def move_to(self, x: float = None, y: float = None, z: float = None, relative: bool = False, feedrate: int = 1000):
         """Move multiple axes in a single coordinated command.
@@ -41,20 +42,20 @@ class Toolhead():
         if not parts:
             return
 
-        # Ensure mode is explicit for the move
+        # Ensure mode is explicit for the move (send reliably)
         if relative:
-            self.control_board.send_message("G91")
+            self.control_board.send_message("G91", require_lock=True)
         else:
-            self.control_board.send_message("G90")
+            self.control_board.send_message("G90", require_lock=True)
 
-        # Send combined move
+        # Send combined move (send reliably)
         cmd = "G0 " + " ".join(parts) + f" F{feedrate}"
-        self.control_board.send_message(cmd)
+        self.control_board.send_message(cmd, require_lock=True)
 
         # Wait for completion using control board's finishing logic
         self.control_board.finish_moves()
 
         # Revert to absolute mode after a relative move for consistent behavior
         if relative:
-            self.control_board.send_message("G90")
+            self.control_board.send_message("G90", require_lock=True)
 

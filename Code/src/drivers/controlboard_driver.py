@@ -45,7 +45,7 @@ class ControlBoard():
             # Use a finite timeout so reads don't block forever and freeze the app
             self.serial = serial.Serial(port, 115200, timeout=1.0)
             self._begin_reader_thread()
-            self.send_message("M501")
+            self.send_message("M501", require_lock=True)
             self.logger.info(f"Connected to control board on port {port}")
         except serial.SerialException as e:
             self.logger.error(f"Error connecting to control board: {e}")
@@ -76,7 +76,7 @@ class ControlBoard():
         # Try to send the emergency stop command
         try:
             if self.is_connected():
-                self.send_message("M112")
+                self.send_message("M112", require_lock=True)
         except Exception as e:
             self.logger.exception(f"Failed to send emergency stop: {e}")
 
@@ -143,10 +143,10 @@ class ControlBoard():
                 try:
                     # Request firmware restart to clear M112 state
                     self.logger.info("Sending firmware reset (M999) to control board")
-                    self.send_message("M999")
+                    self.send_message("M999", require_lock=True)
                     sleep(0.5)
                     # Reload stored settings
-                    self.send_message("M501")
+                    self.send_message("M501", require_lock=True)
                     sleep(0.2)
                 except Exception as e:
                     self.logger.exception(f"Failed to send firmware reset commands: {e}")
@@ -162,7 +162,7 @@ class ControlBoard():
         self.reader_thread.daemon = True
         self.reader_thread.start()
 
-    def send_message(self, message: str):
+    def send_message(self, message: str, require_lock: bool = False, timeout: float = 0.5):
         """Send a message to the control board.
 
         ### Args:
@@ -184,15 +184,26 @@ class ControlBoard():
         # Serialize writes to avoid interleaving bytes from concurrent threads
         acquired = False
         try:
-            try:
-                acquired = self._write_lock.acquire(timeout=0.5)
-            except Exception:
-                acquired = False
+            # Critical messages should block longer to ensure they get sent
+            if require_lock:
+                try:
+                    acquired = self._write_lock.acquire(timeout=5.0)
+                except Exception:
+                    acquired = False
+                if not acquired:
+                    # For required messages, raise so callers can decide how to handle
+                    self.logger.error(f"Timed out waiting for serial write lock for required send: {original_cmd}")
+                    raise RuntimeError("Failed to acquire serial write lock for required message")
+            else:
+                try:
+                    acquired = self._write_lock.acquire(timeout=timeout)
+                except Exception:
+                    acquired = False
 
-            if not acquired:
-                # If we can't acquire the lock quickly, log and skip to avoid blocking UI
-                self.logger.warning(f"Timed out waiting for serial write lock; skipping send: {original_cmd}")
-                return
+                if not acquired:
+                    # If we can't acquire the lock quickly, log and skip to avoid blocking UI
+                    self.logger.warning(f"Timed out waiting for serial write lock; skipping send: {original_cmd}")
+                    return
 
             try:
                 # write via the reader thread's write helper
@@ -224,15 +235,15 @@ class ControlBoard():
         # Ensure positioning mode is explicitly set for this move so the
         # firmware interprets the coordinate correctly.
         if relative:
-            self.send_message("G91")
+            self.send_message("G91", require_lock=True)
         else:
-            self.send_message("G90")
+            self.send_message("G90", require_lock=True)
         sleep(0.1)
         # dont go crazy with these axes,
         if (axis == "Z" or axis == "A" or axis == "B") and feedrate_mm_per_minute == 2000:
             feedrate_mm_per_minute = 600
             
-        self.send_message(f"G0 {axis}{distance_mm} F{feedrate_mm_per_minute}")
+        self.send_message(f"G0 {axis}{distance_mm} F{feedrate_mm_per_minute}", require_lock=True)
         sleep(0.1)
             
         
@@ -242,7 +253,7 @@ class ControlBoard():
         # If we issued a relative move, revert to absolute positioning to
         # keep behavior consistent with previous code.
         if relative:
-            self.send_message("G90")
+            self.send_message("G90", require_lock=True)
             sleep(0.1)
 
     def finish_moves(self):
@@ -254,7 +265,7 @@ class ControlBoard():
         self.received_ok.clear()
         sleep(0.1)
         try:
-            self.send_message("M400")
+            self.send_message("M400", require_lock=True)
         except Exception:
             # send_message already logs failures
             pass
