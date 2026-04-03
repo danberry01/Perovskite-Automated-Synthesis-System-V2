@@ -68,15 +68,12 @@ class InfoFrame(ctk.CTkFrame):
             x = y = z = None
             try:
                 if self.move_registry and hasattr(self.move_registry, 'control_board') and self.move_registry.control_board:
-                    # Ask the control board to report a position (non-blocking)
-                    try:
-                        self.move_registry.control_board.request_position()
-                    except Exception:
-                        pass
-                    # Read last-known positions
-                    x = self.move_registry.toolhead.get_position('X')
-                    y = self.move_registry.toolhead.get_position('Y')
-                    z = self.move_registry.toolhead.get_position('Z')
+                        # Do not actively request a position here; keep UI reads
+                        # lightweight and rely on the control board's move-wait
+                        # logic to request updates while moves are in progress.
+                        x = self.move_registry.toolhead.get_position('X')
+                        y = self.move_registry.toolhead.get_position('Y')
+                        z = self.move_registry.toolhead.get_position('Z')
             except Exception:
                 pass
 

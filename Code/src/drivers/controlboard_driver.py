@@ -37,20 +37,39 @@ class ControlBoard():
         self._positions_lock = threading.Lock()
         # Optional raw serial logging handle (opened by enable_raw_logging)
         self._raw_log_handle = None
+        # Event to indicate a move-level error (e.g. homing failed)
+        self._move_error = threading.Event()
 
     def connect(self):
         """Connect to the control board and start the reader thread."""
         if self.is_connected():
             self.logger.error("Control board is already connected")
+            return
         port = "/dev/control_board"
         try:
             # Use a finite timeout so reads don't block forever and freeze the app
             self.serial = serial.Serial(port, 115200, timeout=1.0)
+            # Start reader thread before sending initialization commands
             self._begin_reader_thread()
-            self.send_message("M501", require_lock=True)
+            try:
+                # Reload stored settings; require reliable send but don't crash the app
+                self.send_message("M501", require_lock=True)
+            except Exception as e:
+                # Log and continue; connection is established even if init command failed
+                self.logger.exception(f"Warning: failed to send init command after connect: {e}")
             self.logger.info(f"Connected to control board on port {port}")
-        except serial.SerialException as e:
+        except Exception as e:
+            # Catch all so connecting from UI won't crash the app
             self.logger.error(f"Error connecting to control board: {e}")
+            try:
+                if getattr(self, 'serial', None):
+                    try:
+                        self.serial.close()
+                    except Exception:
+                        pass
+                    self.serial = None
+            except Exception:
+                pass
     
     def disconnect(self):
         if not self.is_connected():
@@ -150,9 +169,10 @@ class ControlBoard():
         try:
             # Expect lines like: 'X:0.00 Y:0.00 Z:0.00 A:0.00 B:0.00'
             # Use regex to tolerate optional spaces after the colon and different formatting
+            # Be permissive and case-insensitive when matching axis prefixes
             for key in list(self.positions.keys()):
                 try:
-                    m = re.search(rf"{key}:\s*([+-]?\d+(?:\.\d+)?)", line)
+                    m = re.search(rf"{key}:\s*([+-]?\d+(?:\.\d+)?)", line, re.IGNORECASE)
                     if m:
                         val = float(m.group(1))
                         with self._positions_lock:
@@ -226,14 +246,14 @@ class ControlBoard():
         acquired = False
         try:
             if require_lock:
-                # For required messages we block until the lock is available so
-                # the command is reliably sent rather than being silently skipped.
+                # For required messages try to acquire the lock with a longer timeout
                 try:
-                    self._write_lock.acquire()
-                    acquired = True
+                    acquired = self._write_lock.acquire(timeout=5.0)
                 except Exception:
                     acquired = False
-                    self.logger.error(f"Failed to acquire serial write lock for required send: {original_cmd}")
+                if not acquired:
+                    self.logger.error(f"Timed out waiting for serial write lock for required send: {original_cmd}")
+                    raise RuntimeError("Failed to acquire serial write lock for required message")
             else:
                 try:
                     acquired = self._write_lock.acquire(timeout=timeout)
@@ -303,6 +323,11 @@ class ControlBoard():
             return
         # Clear any previous OK marker and request move completion
         self.received_ok.clear()
+        # Clear any previous move error marker
+        try:
+            self._move_error.clear()
+        except Exception:
+            pass
         sleep(0.1)
         try:
             self.send_message("M400", require_lock=True)
@@ -324,6 +349,11 @@ class ControlBoard():
                 self.logger.info("Finish moves interrupted by kill")
                 break
 
+            # If firmware reported a move-level error (e.g. homing failed), abort
+            if getattr(self, '_move_error', None) is not None and self._move_error.is_set():
+                self.logger.error("Move aborted: firmware reported error")
+                break
+
             # Periodically request position updates so UI can show current coords
             now = time.time()
             if now - last_request >= request_interval:
@@ -336,6 +366,10 @@ class ControlBoard():
             if self.received_ok.wait(timeout=poll_interval):
                 break
             waited += poll_interval
+        # If we exited because of a firmware-reported move error, raise so
+        # callers (e.g. procedure runner) can abort and handle it.
+        if getattr(self, '_move_error', None) is not None and self._move_error.is_set():
+            raise RuntimeError("Firmware reported a move error (see logs)")
         
 
 
@@ -385,6 +419,13 @@ class ControlBoardLineReader(serial.threaded.LineReader):
             # If firmware also returned an 'ok' token in the same line, set it.
             if line.lower().startswith("ok"):
                 self.control_board.received_ok.set()
+            # Detect common firmware status echoes indicating a failed move/homing
+            # and record a move-level error so waiting loops can abort.
+            try:
+                if "homing failed" in line.lower() or line.lower().startswith("error") or "unknown message" in line.lower():
+                    self.control_board._move_error.set()
+            except Exception:
+                pass
             return
 
         # Handle OK message used to mark move completion (case-insensitive).
@@ -393,10 +434,17 @@ class ControlBoardLineReader(serial.threaded.LineReader):
             self.control_board.received_ok.set()
             return
 
-        # Fallback: log other informational lines
-        # Treat firmware error responses as warnings so they are visible
-        if line.lower().startswith("error") or "unknown message" in line.lower():
+        # Fallback: log other informational lines. Treat echoed firmware
+        # messages (including 'echo') as warnings. If they indicate a move
+        # error (e.g. homing failed) set the move error event so callers can
+        # abort waits.
+        if line.lower().startswith("error") or "unknown message" in line.lower() or line.lower().startswith("echo"):
             self.logger.warning(f"Firmware: {line}")
+            try:
+                if "homing failed" in line.lower():
+                    self.control_board._move_error.set()
+            except Exception:
+                pass
         else:
             self.logger.debug(f"Received: {line}")
             

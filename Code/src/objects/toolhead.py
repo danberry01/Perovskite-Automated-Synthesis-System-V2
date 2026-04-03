@@ -20,13 +20,23 @@ class Toolhead():
             return None
     
     def home(self):
-        # Home all axes and wait for completion
-        self.control_board.send_message("G28 X Y Z", require_lock=True)
+        # Home each axis separately and wait for completion to avoid
+        # firmware-specific combined G28 failures on some boards.
         try:
+            self.control_board.send_message("G28 Z", require_lock=True)
             self.control_board.finish_moves()
         except Exception:
-            # Don't fail hard if finish wait has issues; caller can handle
-            pass
+            self.control_board.logger.exception("Homing Z failed")
+        try:
+            self.control_board.send_message("G28 Y", require_lock=True)
+            self.control_board.finish_moves()
+        except Exception:
+            self.control_board.logger.exception("Homing Y failed")
+        try:
+            self.control_board.send_message("G28 X", require_lock=True)
+            self.control_board.finish_moves()
+        except Exception:
+            self.control_board.logger.exception("Homing X failed")
 
     def move_to(self, x: float = None, y: float = None, z: float = None, relative: bool = False, feedrate: int = 1000):
         """Move multiple axes in a single coordinated command.
