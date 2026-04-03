@@ -268,6 +268,13 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         import threading
         import logging
         
+        # Ensure any live edits in step widgets are committed before building
+        # the procedure to run.
+        try:
+            self._sync_steps_from_widgets()
+        except Exception:
+            logging.getLogger("Main Logger").exception("Failed to sync step widgets before Quick Run")
+
         if not self.steps:
             logging.getLogger("Main Logger").warning("No steps to run")
             return
@@ -402,6 +409,12 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
             if not file_path.endswith('.yml'):
                 file_path += '.yml'
             
+            # Ensure live edits are committed to `self.steps` before saving
+            try:
+                self._sync_steps_from_widgets()
+            except Exception:
+                logging.getLogger("Main Logger").exception("Failed to sync step widgets before save")
+
             # Convert steps to procedure format
             procedure = []
             for step in self.steps:
@@ -521,6 +534,22 @@ class ProcedureDrafterFrame(ctk.CTkFrame):
         self.selected_index = None
         self.update_selection_visuals()
         self.update_gap_visuals()
+
+    def _sync_steps_from_widgets(self):
+        """Read live widget values from each StepItem and update `self.steps`.
+
+        This ensures values typed into entries are captured even if they
+        haven't lost focus when the user clicks Run/Save.
+        """
+        for idx, widget in enumerate(self.step_widgets):
+            try:
+                if hasattr(widget, 'commit_args_from_widgets'):
+                    new_args = widget.commit_args_from_widgets()
+                    # Overwrite the stored args for the step
+                    if idx < len(self.steps):
+                        self.steps[idx]['args'] = new_args
+            except Exception:
+                logging.getLogger("Main Logger").exception(f"Failed to sync widget for step {idx}")
 
     def update_gap_visuals(self):
         for i, gap in enumerate(self.gap_widgets):

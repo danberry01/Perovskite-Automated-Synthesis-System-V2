@@ -115,6 +115,10 @@ class StepItem(ctk.CTkFrame):
             else:
                 dropdown.set(location_names[0] if location_names else "")
             dropdown.pack(side="left")
+            hint = self._get_param_hint(param_name, param_index)
+            if hint:
+                hint_label = ctk.CTkLabel(container, text=hint, text_color="#AAAAAA")
+                hint_label.pack(side="left", padx=(4, 0))
             return dropdown
         
         # Special case: move_toolhead relative parameter (index 3)
@@ -132,6 +136,10 @@ class StepItem(ctk.CTkFrame):
                     checkbox.select()
             except ValueError:
                 pass
+            hint = self._get_param_hint(param_name, param_index)
+            if hint:
+                hint_label = ctk.CTkLabel(container, text=hint, text_color="#AAAAAA")
+                hint_label.pack(side="left", padx=(4, 0))
             return checkbox
         
         # Special case: measure_spectrum measurement_type parameter (index 0)
@@ -148,6 +156,10 @@ class StepItem(ctk.CTkFrame):
             else:
                 dropdown.set(measurement_types[0] if measurement_types else "")
             dropdown.pack(side="left")
+            hint = self._get_param_hint(param_name, param_index)
+            if hint:
+                hint_label = ctk.CTkLabel(container, text=hint, text_color="#AAAAAA")
+                hint_label.pack(side="left", padx=(4, 0))
             return dropdown
         
         # Default: text entry with smart type conversion
@@ -156,7 +168,57 @@ class StepItem(ctk.CTkFrame):
             entry.insert(0, str(value))
             entry.pack(side="left")
             entry.bind("<FocusOut>", lambda e: self._update_arg_from_widget(param_index, entry.get()))
+            hint = self._get_param_hint(param_name, param_index)
+            if hint:
+                hint_label = ctk.CTkLabel(container, text=hint, text_color="#AAAAAA")
+                hint_label.pack(side="left", padx=(4, 0))
             return entry
+
+    def commit_args_from_widgets(self):
+        """Force-read current widget values and update `self.args` accordingly."""
+        for idx, widget in list(self.control_widgets.items()):
+            try:
+                # OptionMenu/Entry expose `.get()`; CheckBox handled via helper
+                if hasattr(widget, 'get') and callable(widget.get):
+                    # CTkCheckBox also has get() but we reuse the checkbox handler
+                    if type(widget).__name__ == 'CTkCheckBox':
+                        self._update_checkbox_arg(idx, widget)
+                    else:
+                        val = widget.get()
+                        self._update_arg_from_widget(idx, val)
+                else:
+                    # Fallback: leave existing value
+                    pass
+            except Exception:
+                import logging
+                logging.getLogger('Main Logger').exception('Failed to commit widget value')
+        return self.args
+
+    def _get_param_hint(self, param_name, param_index):
+        """Return a short hint string for the parameter if available."""
+        try:
+            if not self.move_registry or self.function_name not in self.move_registry.move_dict:
+                return ""
+            func = self.move_registry.move_dict[self.function_name]
+            sig = signature(func)
+            params = list(sig.parameters.values())
+            if params and params[0].name == 'self':
+                params = params[1:]
+            if param_index < len(params):
+                p = params[param_index]
+                if p.default is not p.empty:
+                    return f"default: {p.default}"
+            # Heuristics for common names
+            name = (param_name or "").lower()
+            if name in ('x', 'y', 'z'):
+                return "units: mm"
+            if name == 'relative':
+                return "0 or 1 (absolute=0, relative=1)"
+            if 'time' in name or 'seconds' in name:
+                return "seconds"
+            return ""
+        except Exception:
+            return ""
 
     def _get_location_names(self):
         """Get list of location names from persistent locations"""

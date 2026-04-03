@@ -26,20 +26,48 @@ class Toolhead():
     
     def home(self):
         # Home each axis separately and wait for completion to avoid
-        # firmware-specific combined G28 failures on some boards.
+        # firmware-specific combined G28 failures on some boards. If X does
+        # not appear to change after a per-axis homing attempt, try a
+        # combined homing fallback for robustness.
+        logger = self.control_board.logger
+
+        def _pos_close(a, b, tol=0.5):
+            try:
+                return a is not None and b is not None and abs(float(a) - float(b)) <= tol
+            except Exception:
+                return False
+
+        start_x = self.get_position("X")
         try:
             self.control_board.send_message("G28 Z", require_lock=True)
             self.control_board.finish_moves()
+            logger.info(f"Homed Z; position Z={self.get_position('Z')}")
         except Exception:
             self.control_board.logger.exception("Homing Z failed")
         try:
             self.control_board.send_message("G28 Y", require_lock=True)
             self.control_board.finish_moves()
+            logger.info(f"Homed Y; position Y={self.get_position('Y')}")
         except Exception:
             self.control_board.logger.exception("Homing Y failed")
+
         try:
             self.control_board.send_message("G28 X", require_lock=True)
             self.control_board.finish_moves()
+            logger.info(f"Homed X attempt; position X={self.get_position('X')}")
+            new_x = self.get_position("X")
+            # If X didn't change, try a conservative combined homing fallback
+            if not _pos_close(start_x, new_x):
+                logger.info("X homing changed position; good.")
+            else:
+                logger.warning("X homing did not change position; attempting combined homing fallback")
+                try:
+                    # Try homing all axes together as a fallback
+                    self.control_board.send_message("G28 X Y Z", require_lock=True)
+                    self.control_board.finish_moves()
+                    logger.info(f"Combined homing complete; position X={self.get_position('X')}")
+                except Exception:
+                    self.control_board.logger.exception("Fallback combined homing failed for X")
         except Exception:
             self.control_board.logger.exception("Homing X failed")
 
