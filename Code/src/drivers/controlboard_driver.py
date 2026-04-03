@@ -2,6 +2,7 @@ from queue import Queue
 import logging
 import threading
 import time
+import re
 from time import sleep
 import serial
 import serial.threaded
@@ -107,16 +108,17 @@ class ControlBoard():
         """Parse a status line containing X:,Y:,Z: etc and update positions."""
         try:
             # Expect lines like: 'X:0.00 Y:0.00 Z:0.00 A:0.00 B:0.00'
-            for substr, key in zip(ControlBoardLineReader.POSITION_PREFIXS, self.positions):
-                if substr in line:
-                    try:
-                        number = (line.split(substr)[1]).split(" ")[0]
-                        val = float(number)
+            # Use regex to tolerate optional spaces after the colon and different formatting
+            for key in list(self.positions.keys()):
+                try:
+                    m = re.search(rf"{key}:\s*([+-]?\d+(?:\.\d+)?)", line)
+                    if m:
+                        val = float(m.group(1))
                         with self._positions_lock:
                             self.positions[key] = val
-                    except Exception:
-                        # ignore parse errors for individual values
-                        pass
+                except Exception:
+                    # ignore parse errors for individual values
+                    pass
         except Exception:
             self.logger.exception("Failed to parse position line")
 
@@ -210,7 +212,7 @@ class ControlBoard():
     def move_axis(self, axis: str, distance_mm: float, feedrate_mm_per_minute: int = 2000, relative: bool = False, finish_move: bool = True):
         """ Takes in a list of axes, distances and speeds to move the gantry"""
         if axis not in self.positions.keys():
-            raise f"Invalid axis {axis}"
+            raise ValueError(f"Invalid axis {axis}")
   
         if relative and distance_mm == 0:
             return
@@ -311,8 +313,8 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         if line.upper().startswith("M114"):
             return
 
-        # Handle OK message used to mark move completion
-        if line == "ok":
+        # Handle OK message used to mark move completion (case-insensitive)
+        if line.lower().startswith("ok"):
             self.control_board.received_ok.set()
             return
 
