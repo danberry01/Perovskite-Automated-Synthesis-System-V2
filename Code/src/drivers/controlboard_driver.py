@@ -313,17 +313,19 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         if line.upper().startswith("M114"):
             return
 
-        # Handle OK message used to mark move completion (case-insensitive)
-        if line.lower().startswith("ok"):
-            self.control_board.received_ok.set()
-            return
-
-        # If any position prefix is present, treat as a position update
+        # If any position prefix is present, treat as a position update.
+        # Do this before handling the OK token so lines like 'ok X:... Y:...' get
+        # their positions recorded as well as signalling completion.
         if any(prefix in line for prefix in self.POSITION_PREFIXS):
             try:
                 self.control_board._update_positions_from_line(line)
             except Exception:
                 self.logger.exception("Failed to update positions from line")
+
+        # Handle OK message used to mark move completion (case-insensitive).
+        # Accept lines that start with 'ok' (firmware may append extra text).
+        if line.lower().startswith("ok"):
+            self.control_board.received_ok.set()
             return
 
         # Fallback: log other informational lines
