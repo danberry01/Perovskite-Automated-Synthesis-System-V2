@@ -183,23 +183,18 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             'z': sum(p['z'] for p in positions) / len(positions)
                         }
 
-                # Get current gantry position
-                gantry_pos = self.control_board.positions.copy()
-
-                # Calculate absolute positions (relative marker pos + gantry pos)
-                absolute_positions = {}
-                for marker_id, rel_pos in marker_positions.items():
-                    absolute_positions[marker_id] = {
-                        'x': gantry_pos['X'] + rel_pos['x'] * 1000,
-                        'y': gantry_pos['Y'] + rel_pos['y'] * 1000,
-                        'z': gantry_pos['Z'] + rel_pos['z'] * 1000
-                    }
+                # At this point we only have relative positions measured in the
+                # camera frame. Do NOT compute/store absolute positions yet because
+                # homing (which occurs during verification) may change the gantry
+                # reference. We'll compute `abs_position` from the current
+                # `gantry_position` only when about to perform motion.
+                # Keep `marker_positions` as `relative_position` in camera frame.
 
                 self._update_status("Verifying calibration...")
 
                 verified_results = {}
 
-                for marker_id, abs_pos in absolute_positions.items():
+                for marker_id, rel_pos in marker_positions.items():
                     if self._cancel_requested:
                         break
 
@@ -209,10 +204,10 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     attempts = 0
                     max_attempts = 15
 
-                    # Keep a reference gantry position from before homing
-                    initial_gantry_ref = gantry_pos.copy()
+                    # Keep a record of the gantry position seen before any homing
+                    pre_homing_gantry_ref = self.control_board.positions.copy()
 
-                    self.logger.info(f"Verifying Marker {marker_id} at expected abs pos X={abs_pos['x']:.2f} Y={abs_pos['y']:.2f} Z={abs_pos['z']:.2f}")
+                    self.logger.info(f"Verifying Marker {marker_id} (relative camera pos x={rel_pos['x']:.3f} y={rel_pos['y']:.3f} z={rel_pos['z']:.3f})")
 
                     while consecutive_successes < 3 and attempts < max_attempts and not self._cancel_requested:
                         attempts += 1
@@ -238,7 +233,23 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             consecutive_successes = 0
                             continue
 
-                        # Move to the previously recorded absolute position using coordinated move
+                        # After successful homing, capture the gantry position
+                        # that defines the physical coordinate system we'll use
+                        # to compute the absolute target for this verification.
+                        gantry_ref_after_home = self.control_board.positions.copy()
+
+                        # Compute the absolute target position using the
+                        # post-homing gantry reference + relative camera offset
+                        abs_pos = {
+                            'x': gantry_ref_after_home['X'] + rel_pos['x'] * 1000,
+                            'y': gantry_ref_after_home['Y'] + rel_pos['y'] * 1000,
+                            'z': gantry_ref_after_home['Z'] + rel_pos['z'] * 1000
+                        }
+
+                        # Move to the computed absolute position using the normal
+                        # gantry motion calls (this updates `control_board.positions`
+                        # via normal motion feedback — do NOT assign positions
+                        # directly anywhere).
                         try:
                             self.logger.debug(f"Moving to absolute pos for Marker {marker_id}: {abs_pos}")
                             if hasattr(self.dispatcher, 'toolhead') and self.dispatcher.toolhead is not None:
@@ -284,6 +295,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             'z': sum(p['z'] for p in detections) / len(detections)
                         }
 
+
                         # Compute absolute marker position using current gantry pos
                         current_gantry = self.control_board.positions.copy()
                         current_abs = {
@@ -310,12 +322,18 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
 
                     # End attempts for this marker
                     if consecutive_successes >= 3:
-                        # Save verification results
+                        # Save verification results. Store the original
+                        # `relative_position` (camera frame), the computed
+                        # `absolute_position` (gantry coords at time of
+                        # verification), and the gantry reference used to
+                        # compute that absolute position. Do NOT modify the
+                        # physical gantry coordinate system here — the stored
+                        # values are for reference only.
                         verified_results[marker_id] = {
                             'relative_positions': [marker_positions[marker_id]],
                             'absolute_position': abs_pos,
                             'verification_count': consecutive_successes,
-                            'gantry_reference': initial_gantry_ref,
+                            'gantry_reference': gantry_ref_after_home,
                             'verification_average': {'x': avg_rel['x'], 'y': avg_rel['y'], 'z': avg_rel['z']},
                             'detection_variance': {}
                         }

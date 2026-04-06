@@ -6,11 +6,7 @@ import os
 import smtplib
 from email.message import EmailMessage
 from datetime import datetime
-
-try:
-    import yaml
-except Exception:
-    yaml = None
+from drivers.procedure_file_driver import ProcedureFile
 
 # Place the ConsoleFrame inside the InfoFrame so the console is part of the
 # bottom pane and remains visible when the procedure viewer is not active.
@@ -72,7 +68,7 @@ class InfoFrame(ctk.CTkFrame):
             self.emails = []
 
         # Option menu for selecting recipient
-        option_values = self.emails if len(self.emails) > 0 else ["(no emails)"]
+        option_values = self.emails if len(self.emails) > 0 else ["(no emails. Add to emails.yml)"]
         self.email_dropdown = ctk.CTkOptionMenu(
             master=self.status_frame,
             values=option_values,
@@ -213,8 +209,11 @@ class InfoFrame(ctk.CTkFrame):
 
     def _ensure_emails_file(self):
         try:
-            os.makedirs(os.path.dirname(self._emails_file), exist_ok=True)
-            if not os.path.exists(self._emails_file):
+            # Use the same ProcedureFile helper used for locations.yml so
+            # parsing/formatting is consistent across the app.
+            pf = ProcedureFile()
+            data = pf.Open('persistant/emails.yml') or pf.Open('persistant/emails')
+            if not data:
                 default = {
                     'smtp': {
                         'host': 'localhost',
@@ -226,33 +225,19 @@ class InfoFrame(ctk.CTkFrame):
                     'from': 'pass@localhost',
                     'recipients': ['user@example.com']
                 }
-                if yaml:
-                    with open(self._emails_file, 'w') as f:
-                        yaml.safe_dump(default, f)
-                else:
-                    with open(self._emails_file, 'w') as f:
-                        f.write('smtp:\n  host: localhost\n  port: 25\n  username: ""\n  password: ""\n  use_tls: false\nfrom: pass@localhost\nrecipients:\n- user@example.com\n')
+                pf.Save('persistant/emails', default)
         except Exception:
             logging.getLogger("Main Logger").exception("Failed to create emails.yml")
 
     def _load_emails(self):
         try:
-            if not os.path.exists(self._emails_file):
+            pf = ProcedureFile()
+            data = pf.Open('persistant/emails.yml') or pf.Open('persistant/emails')
+            if not data:
                 return []
-            if yaml:
-                with open(self._emails_file, 'r') as f:
-                    data = yaml.safe_load(f) or {}
-                self._smtp_config = data.get('smtp', {}) or {}
-                self._from_addr = data.get('from', self._smtp_config.get('username') or 'pass@localhost')
-                return data.get('recipients', []) or []
-            else:
-                recipients = []
-                with open(self._emails_file, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith('- '):
-                            recipients.append(line[2:].strip())
-                return recipients
+            self._smtp_config = data.get('smtp', {}) or {}
+            self._from_addr = data.get('from', self._smtp_config.get('username') or 'pass@localhost')
+            return data.get('recipients', []) or []
         except Exception:
             logging.getLogger("Main Logger").exception("Failed to load emails.yml")
             return []
