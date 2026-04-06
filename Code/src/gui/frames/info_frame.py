@@ -2,6 +2,15 @@ import customtkinter as ctk
 from ..components.constants import *
 import logging
 from time import sleep
+import os
+import smtplib
+from email.message import EmailMessage
+from datetime import datetime
+
+try:
+    import yaml
+except Exception:
+    yaml = None
 
 # Place the ConsoleFrame inside the InfoFrame so the console is part of the
 # bottom pane and remains visible when the procedure viewer is not active.
@@ -49,6 +58,36 @@ class InfoFrame(ctk.CTkFrame):
         # Spincoater status label
         self.spincoater_label = ctk.CTkLabel(self.status_frame, text="Spincoater: Disconnected | RPM: --", anchor="e", font=("Arial", 12))
         self.spincoater_label.grid(row=4, column=0, sticky="ne")
+
+        # Email dropdown + send button (below hotplate/spincoater info)
+        # emails.yml is stored under Code/src/persistant/emails.yml
+        self._emails_file = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', 'persistant', 'emails.yml'))
+        self._smtp_config = {}
+        self._from_addr = 'pass@localhost'
+        try:
+            self._ensure_emails_file()
+            self.emails = self._load_emails() or []
+        except Exception:
+            logging.getLogger("Main Logger").exception("Failed to initialize emails.yml")
+            self.emails = []
+
+        # Option menu for selecting recipient
+        option_values = self.emails if len(self.emails) > 0 else ["(no emails)"]
+        self.email_dropdown = ctk.CTkOptionMenu(
+            master=self.status_frame,
+            values=option_values,
+            width=200,
+            fg_color=PLAIN_TEXT_COLOR,
+            button_color=PLAIN_TEXT_COLOR,
+            button_hover_color=FOREGROUND_COLOR_TWO,
+            corner_radius=0,
+            command=self._on_email_selected
+        )
+        self.email_dropdown.grid(row=5, column=0, sticky="ne", padx=5, pady=(6, 0))
+
+        # Button to send the entire console log to the selected email
+        self.email_button = ctk.CTkButton(master=self.status_frame, text="Email Console", command=self.send_console_email)
+        self.email_button.grid(row=6, column=0, sticky="ne", padx=5, pady=(6, 6))
 
         # Console placed in the bottom area
         self.console_frame = ConsoleFrame(master=self)
@@ -169,5 +208,96 @@ class InfoFrame(ctk.CTkFrame):
                 # Reduce polling frequency to avoid flooding the console with
                 # frequent M114 requests; 1000ms is sufficient for UI updates.
                 self._after_id = self.after(1000, self._update_loop)
+            except Exception:
+                pass
+
+    def _ensure_emails_file(self):
+        try:
+            os.makedirs(os.path.dirname(self._emails_file), exist_ok=True)
+            if not os.path.exists(self._emails_file):
+                default = {
+                    'smtp': {
+                        'host': 'localhost',
+                        'port': 25,
+                        'username': '',
+                        'password': '',
+                        'use_tls': False
+                    },
+                    'from': 'pass@localhost',
+                    'recipients': ['user@example.com']
+                }
+                if yaml:
+                    with open(self._emails_file, 'w') as f:
+                        yaml.safe_dump(default, f)
+                else:
+                    with open(self._emails_file, 'w') as f:
+                        f.write('smtp:\n  host: localhost\n  port: 25\n  username: ""\n  password: ""\n  use_tls: false\nfrom: pass@localhost\nrecipients:\n- user@example.com\n')
+        except Exception:
+            logging.getLogger("Main Logger").exception("Failed to create emails.yml")
+
+    def _load_emails(self):
+        try:
+            if not os.path.exists(self._emails_file):
+                return []
+            if yaml:
+                with open(self._emails_file, 'r') as f:
+                    data = yaml.safe_load(f) or {}
+                self._smtp_config = data.get('smtp', {}) or {}
+                self._from_addr = data.get('from', self._smtp_config.get('username') or 'pass@localhost')
+                return data.get('recipients', []) or []
+            else:
+                recipients = []
+                with open(self._emails_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith('- '):
+                            recipients.append(line[2:].strip())
+                return recipients
+        except Exception:
+            logging.getLogger("Main Logger").exception("Failed to load emails.yml")
+            return []
+
+    def _on_email_selected(self, value):
+        self._selected_email = value
+
+    def send_console_email(self):
+        try:
+            recipient = getattr(self, '_selected_email', None)
+            try:
+                if not recipient and hasattr(self.email_dropdown, 'get'):
+                    recipient = self.email_dropdown.get()
+            except Exception:
+                pass
+            if not recipient or recipient == "(no emails)":
+                self.console_frame.write_to_console(f"ERROR\t{datetime.now().isoformat()}: No recipient selected for email.")
+                return
+            try:
+                console_text = self.console_frame.console.get("1.0", "end")
+            except Exception:
+                console_text = ""
+            subject = f"PASS Console Log [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            msg = EmailMessage()
+            msg['Subject'] = subject
+            msg['From'] = getattr(self, '_from_addr', 'pass@localhost')
+            msg['To'] = recipient
+            msg.set_content(console_text)
+            smtp = getattr(self, '_smtp_config', {}) or {}
+            host = smtp.get('host', 'localhost')
+            port = smtp.get('port', 25)
+            username = smtp.get('username')
+            password = smtp.get('password')
+            use_tls = smtp.get('use_tls', False)
+            server = smtplib.SMTP(host, port, timeout=10)
+            if use_tls:
+                server.starttls()
+            if username and password:
+                server.login(username, password)
+            server.send_message(msg)
+            server.quit()
+            self.console_frame.write_to_console(f"INFO\t{datetime.now().isoformat()}: Sent console log to {recipient}")
+        except Exception as e:
+            logging.getLogger("Main Logger").exception("Failed to send console email: %s", e)
+            try:
+                self.console_frame.write_to_console(f"ERROR\t{datetime.now().isoformat()}: Failed to send email: {e}")
             except Exception:
                 pass

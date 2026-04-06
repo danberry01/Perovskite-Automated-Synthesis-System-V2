@@ -1,0 +1,15 @@
+# emails.yml - configuration for console-log emailing
+# Edit the recipients list to add one or more email addresses.
+# Optionally configure SMTP settings under 'smtp'. If omitted, the app will try to use localhost:25.
+
+smtp:
+  host: localhost
+  port: 25
+  username: ""
+  password: ""
+  use_tls: false
+
+from: pass@localhost
+
+recipients:
+  - user@example.com
