@@ -223,7 +223,7 @@ class InfoFrame(ctk.CTkFrame):
                         'use_tls': False
                     },
                     'from': 'pass@localhost',
-                    'recipients': ['user@example.com']
+                    'recipients': ['dcounte1@binghamton.edu']
                 }
                 pf.Save('persistant/emails', default)
         except Exception:
