@@ -13,7 +13,16 @@ from .aruco_calibration_layout import ArucoCalibrationLayout
 
 
 class ArucoCalibrationFrame(ctk.CTkFrame):
-    """Frame for calibrating ArUco marker positions in absolute coordinate system"""
+    """Frame for calibrating ArUco marker positions.
+
+    Coordinate system separation:
+    - `relative_position`: marker position in the camera frame (meters)
+    - `gantry_position`: physical gantry coordinates (mm) — never overridden by calibration
+    - `abs_aruco_position`: computed gantry coordinates (mm) where the ARuCo marker is located
+
+    `abs_aruco_position` is stored for reference only and is never used as
+    a command target for motion. Motion is always driven by `gantry_position`.
+    """
     
     def __init__(self, master, dispatcher, **kwargs):
         super().__init__(master, fg_color=FOREGROUND_COLOR, corner_radius=0)
@@ -184,11 +193,13 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         }
 
                 # At this point we only have relative positions measured in the
-                # camera frame. Do NOT compute/store absolute positions yet because
-                # homing (which occurs during verification) may change the gantry
-                # reference. We'll compute `abs_position` from the current
-                # `gantry_position` only when about to perform motion.
-                # Keep `marker_positions` as `relative_position` in camera frame.
+                # camera frame. Per design: we must save the relative marker
+                # position AND the current gantry position (where the marker was
+                # observed). We will NOT use any computed absolute aruco position
+                # for motion — movement must be driven by gantry coordinates only.
+
+                # Record the gantry position(s) where each marker was observed
+                recorded_gantry_positions = {mid: self.control_board.positions.copy() for mid in marker_positions.keys()}
 
                 self._update_status("Verifying calibration...")
 
@@ -204,10 +215,10 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     attempts = 0
                     max_attempts = 15
 
-                    # Keep a record of the gantry position seen before any homing
-                    pre_homing_gantry_ref = self.control_board.positions.copy()
+                    # Gantry position recorded at initial scan (do NOT alter)
+                    recorded_gantry = recorded_gantry_positions.get(marker_id, self.control_board.positions.copy())
 
-                    self.logger.info(f"Verifying Marker {marker_id} (relative camera pos x={rel_pos['x']:.3f} y={rel_pos['y']:.3f} z={rel_pos['z']:.3f})")
+                    self.logger.info(f"Verifying Marker {marker_id} (relative camera pos x={rel_pos['x']:.3f} y={rel_pos['y']:.3f} z={rel_pos['z']:.3f}); recorded gantry {recorded_gantry}")
 
                     while consecutive_successes < 3 and attempts < max_attempts and not self._cancel_requested:
                         attempts += 1
@@ -233,34 +244,24 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             consecutive_successes = 0
                             continue
 
-                        # After successful homing, capture the gantry position
-                        # that defines the physical coordinate system we'll use
-                        # to compute the absolute target for this verification.
-                        gantry_ref_after_home = self.control_board.positions.copy()
-
-                        # Compute the absolute target position using the
-                        # post-homing gantry reference + relative camera offset
-                        abs_pos = {
-                            'x': gantry_ref_after_home['X'] + rel_pos['x'] * 1000,
-                            'y': gantry_ref_after_home['Y'] + rel_pos['y'] * 1000,
-                            'z': gantry_ref_after_home['Z'] + rel_pos['z'] * 1000
-                        }
-
-                        # Move to the computed absolute position using the normal
-                        # gantry motion calls (this updates `control_board.positions`
-                        # via normal motion feedback — do NOT assign positions
-                        # directly anywhere).
+                        # After homing, move to the recorded gantry position
+                        # that was saved during the initial scan. This ensures the
+                        # gantry goes to the same physical coordinates used when
+                        # the marker was first seen. DO NOT use any 'absolute'
+                        # aruco coordinates to command motion.
                         try:
-                            self.logger.debug(f"Moving to absolute pos for Marker {marker_id}: {abs_pos}")
+                            target = recorded_gantry
+                            self.logger.debug(f"Moving to recorded gantry pos for Marker {marker_id}: {target}")
                             if hasattr(self.dispatcher, 'toolhead') and self.dispatcher.toolhead is not None:
-                                self.dispatcher.toolhead.move_to(x=abs_pos['x'], y=abs_pos['y'], z=abs_pos['z'], relative=False, feedrate=2000, coordinated=True)
+                                # toolhead.move_to expects mm coordinates (X/Y/Z)
+                                self.dispatcher.toolhead.move_to(x=target['X'], y=target['Y'], z=target['Z'], relative=False, feedrate=2000, coordinated=True)
                             else:
                                 # Fall back to per-axis moves if toolhead not available
-                                self.control_board.move_axis('Z', abs_pos['z'], feedrate_mm_per_minute=600)
-                                self.control_board.move_axis('X', abs_pos['x'], feedrate_mm_per_minute=2000)
-                                self.control_board.move_axis('Y', abs_pos['y'], feedrate_mm_per_minute=2000)
+                                self.control_board.move_axis('Z', target['Z'], feedrate_mm_per_minute=600)
+                                self.control_board.move_axis('X', target['X'], feedrate_mm_per_minute=2000)
+                                self.control_board.move_axis('Y', target['Y'], feedrate_mm_per_minute=2000)
                         except Exception as e:
-                            self.logger.exception(f"Failed to move to absolute pos for Marker {marker_id} on attempt {attempts}: {e}")
+                            self.logger.exception(f"Failed to move to recorded gantry pos for Marker {marker_id} on attempt {attempts}: {e}")
                             consecutive_successes = 0
                             _time.sleep(0.2)
                             continue
@@ -296,19 +297,16 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         }
 
 
-                        # Compute absolute marker position using current gantry pos
-                        current_gantry = self.control_board.positions.copy()
-                        current_abs = {
-                            'x': current_gantry['X'] + avg_rel['x'] * 1000,
-                            'y': current_gantry['Y'] + avg_rel['y'] * 1000,
-                            'z': current_gantry['Z'] + avg_rel['z'] * 1000
-                        }
+                        # Compare the observed relative marker position with the
+                        # originally recorded relative position. This comparison
+                        # is independent of any absolute aruco coordinate system
+                        # and ensures the marker appears in the same place from
+                        # the camera POV when the gantry is at the recorded pos.
+                        dx = abs((avg_rel['x'] - rel_pos['x']) * 1000)
+                        dy = abs((avg_rel['y'] - rel_pos['y']) * 1000)
+                        dz = abs((avg_rel['z'] - rel_pos['z']) * 1000)
 
-                        dx = abs(current_abs['x'] - abs_pos['x'])
-                        dy = abs(current_abs['y'] - abs_pos['y'])
-                        dz = abs(current_abs['z'] - abs_pos['z'])
-
-                        self.logger.debug(f"Marker {marker_id} attempt {attempts}: delta(mm) dx={dx:.2f}, dy={dy:.2f}, dz={dz:.2f}")
+                        self.logger.debug(f"Marker {marker_id} attempt {attempts}: relative delta(mm) dx={dx:.2f}, dy={dy:.2f}, dz={dz:.2f}")
 
                         if dx <= tolerance_mm and dy <= tolerance_mm and dz <= tolerance_mm:
                             consecutive_successes += 1
@@ -324,16 +322,23 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     if consecutive_successes >= 3:
                         # Save verification results. Store the original
                         # `relative_position` (camera frame), the computed
-                        # `absolute_position` (gantry coords at time of
-                        # verification), and the gantry reference used to
-                        # compute that absolute position. Do NOT modify the
-                        # physical gantry coordinate system here — the stored
-                        # values are for reference only.
+                        # `abs_aruco_position` (gantry coords where the aruco
+                        # marker is located computed from the recorded gantry
+                        # position), and the recorded gantry position used as
+                        # reference. Do NOT modify the physical gantry
+                        # coordinate system here — the stored values are for
+                        # reference only.
+                        abs_aruco_position = {
+                            'x': recorded_gantry['X'] + rel_pos['x'] * 1000,
+                            'y': recorded_gantry['Y'] + rel_pos['y'] * 1000,
+                            'z': recorded_gantry['Z'] + rel_pos['z'] * 1000
+                        }
+
                         verified_results[marker_id] = {
                             'relative_positions': [marker_positions[marker_id]],
-                            'absolute_position': abs_pos,
+                            'abs_aruco_position': abs_aruco_position,
                             'verification_count': consecutive_successes,
-                            'gantry_reference': gantry_ref_after_home,
+                            'gantry_reference': recorded_gantry,
                             'verification_average': {'x': avg_rel['x'], 'y': avg_rel['y'], 'z': avg_rel['z']},
                             'detection_variance': {}
                         }
@@ -502,8 +507,9 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         id_label = ctk.CTkLabel(frame, text=f"ID: {marker_id}", font=("Arial", 15, "bold"), text_color = "#FFFFFF")
         id_label.pack(side = "left", padx=5, pady=2)
 
-        # Position data
-        abs_pos = data['absolute_position']
+        # Position data (store/display the aruco absolute position only;
+        # this is the location of the ARuCo marker in gantry coords)
+        abs_pos = data.get('abs_aruco_position') or data.get('absolute_position') or {'x': 0, 'y': 0, 'z': 0}
         pos_text = f"X: {abs_pos['x']:.2f}mm  Y: {abs_pos['y']:.2f}mm  Z: {abs_pos['z']:.2f}mm"
         pos_label = ctk.CTkLabel(frame, text=pos_text, font=("Arial", 15), text_color = "#4BD5ED")
         pos_label.pack(side = "left", padx=5, pady=2)
@@ -526,7 +532,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         if self.pending_calibrations:
             text = "Pending (Newly Calibrated) Markers:\n"
             for marker_id, data in self.pending_calibrations.items():
-                abs_pos = data['absolute_position']
+                abs_pos = data.get('abs_aruco_position') or data.get('absolute_position') or {'x': 0, 'y': 0, 'z': 0}
                 text += f"Marker ID {marker_id}: X={abs_pos['x']:.2f}, Y={abs_pos['y']:.2f}, Z={abs_pos['z']:.2f}\n"
         else:
             text = "No newly calibrated markers. Start a scan to detect markers."
@@ -571,6 +577,10 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     self.calibration_data = json.load(f)
                     # Convert string keys back to integers
                     self.calibration_data = {int(k): v for k, v in self.calibration_data.items()}
+                    # Migrate legacy keys: 'absolute_position' -> 'abs_aruco_position'
+                    for k, v in list(self.calibration_data.items()):
+                        if isinstance(v, dict) and 'absolute_position' in v and 'abs_aruco_position' not in v:
+                            v['abs_aruco_position'] = v.pop('absolute_position')
                     self.logger.debug(f"Loaded {len(self.calibration_data)} calibrations from file")
             self._update_ui()
         except Exception as e:
