@@ -37,6 +37,11 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.width = dispatcher.camera_width
         self.height = dispatcher.camera_height
         
+        # Shared frame buffer (updated by UI thread) for safe access from
+        # the background calibration worker to avoid multiple threads
+        # reading from the same VideoCapture instance concurrently.
+        self._last_frame = None
+        self._frame_lock = threading.Lock()
         # Calibration data storage
         self.calibration_data: Dict[int, Dict] = {}  # saved/permanent calibrations
         self.pending_calibrations: Dict[int, Dict] = {}  # newly scanned calibrations not yet saved
@@ -92,16 +97,24 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         if result['count'] > 0:
             self.logger.debug(f"Detected {result['count']} markers")
         
-        # Convert for Tkinter display
+        # Store a copy of the raw frame for the worker to use (avoid
+        # concurrent reads from the VideoCapture). Use a lock for safety.
+        try:
+            with self._frame_lock:
+                self._last_frame = frame.copy()
+        except Exception:
+            with self._frame_lock:
+                self._last_frame = frame
+
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         captured_image = Image.fromarray(frame_rgb)
-        
+
         ctk_image = ctk.CTkImage(
             light_image=captured_image,
             dark_image=captured_image,
             size=(self.width, self.height)
         )
-        
+
         # Update display
         self.camera_display.configure(image=ctk_image)
         self.camera_display.image = ctk_image
@@ -114,6 +127,26 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self._is_paused = False
         if self._video_feed_after_id is None:
             self._update_camera_display()
+
+    def _show_frame_on_ui(self, frame):
+        """Helper to display an annotated BGR frame on the camera display.
+
+        This method must be called from the UI thread (we schedule it with
+        `_call_ui` from the worker thread).
+        """
+        try:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            captured_image = Image.fromarray(frame_rgb)
+            ctk_image = ctk.CTkImage(
+                light_image=captured_image,
+                dark_image=captured_image,
+                size=(self.width, self.height)
+            )
+            self.camera_display.configure(image=ctk_image)
+            self.camera_display.image = ctk_image
+        except Exception:
+            # Don't let UI display errors crash the worker
+            pass
     
     def _stop_camera_display(self):
         """Stop the camera display update loop"""
@@ -153,20 +186,33 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         import time
 
         try:
-            cap = self.myVideoCapture
-
+            # Worker reads frames from the UI-updated `_last_frame` buffer to
+            # avoid multiple threads reading from the same VideoCapture.
             while not self._cancel_requested:
-                self._update_status("Scanning for markers...")
+                self._call_ui(self._update_status, "Scanning for markers...")
 
                 start_time = time.time()
                 detected_markers = {}
 
-                while time.time() - start_time < 2.0 and not self._cancel_requested:
-                    ret, frame = cap.read()
-                    if not ret:
+                # Increase the initial scan window to give the camera time to
+                # present stable frames. We sample the latest UI-updated frame.
+                scan_window = 4.0
+                min_detections_per_marker = 3
+                span_threshold_m = 0.01  # 10 mm spread allowed across detections
+
+                while time.time() - start_time < scan_window and not self._cancel_requested:
+                    with self._frame_lock:
+                        frame = None if self._last_frame is None else self._last_frame.copy()
+                    if frame is None:
+                        time.sleep(0.02)
                         continue
 
                     result = self.aruco_detector.detect_markers(frame)
+
+                    # Show annotated frame in UI so the user sees each scan
+                    if result and 'frame' in result:
+                        self._call_ui(self._show_frame_on_ui, result['frame'])
+
                     if result['count'] > 0:
                         for marker in result['markers']:
                             marker_id = marker['id']
@@ -174,34 +220,46 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                                 detected_markers[marker_id] = []
                             detected_markers[marker_id].append(marker['position'])
 
+                    time.sleep(0.02)
+
                 if self._cancel_requested:
                     break
 
                 if not detected_markers:
-                    self._update_status("No markers detected. Retry in 1 sec or Cancel.")
+                    self._call_ui(self._update_status, "No markers detected. Retry in 1 sec or Cancel.")
                     time.sleep(1.0)
                     continue
 
-                # Average the detections for each marker
+                # Filter and average detections for stability
                 marker_positions = {}
                 for marker_id, positions in detected_markers.items():
-                    if positions:
-                        marker_positions[marker_id] = {
-                            'x': sum(p['x'] for p in positions) / len(positions),
-                            'y': sum(p['y'] for p in positions) / len(positions),
-                            'z': sum(p['z'] for p in positions) / len(positions)
-                        }
+                    if len(positions) < min_detections_per_marker:
+                        self.logger.debug(f"Marker {marker_id} seen only {len(positions)} times; skipping")
+                        continue
+                    xs = [p['x'] for p in positions]
+                    ys = [p['y'] for p in positions]
+                    zs = [p['z'] for p in positions]
+                    span_x = max(xs) - min(xs)
+                    span_y = max(ys) - min(ys)
+                    span_z = max(zs) - min(zs)
+                    if span_x > span_threshold_m or span_y > span_threshold_m or span_z > span_threshold_m:
+                        self.logger.debug(f"Marker {marker_id} detections too spread (m): x={span_x:.4f} y={span_y:.4f} z={span_z:.4f}; skipping")
+                        continue
+                    marker_positions[marker_id] = {
+                        'x': sum(xs) / len(xs),
+                        'y': sum(ys) / len(ys),
+                        'z': sum(zs) / len(zs)
+                    }
 
-                # At this point we only have relative positions measured in the
-                # camera frame. Per design: we must save the relative marker
-                # position AND the current gantry position (where the marker was
-                # observed). We will NOT use any computed absolute aruco position
-                # for motion — movement must be driven by gantry coordinates only.
+                if not marker_positions:
+                    self._call_ui(self._update_status, "Detections inconsistent; retrying scan.")
+                    time.sleep(1.0)
+                    continue
 
                 # Record the gantry position(s) where each marker was observed
                 recorded_gantry_positions = {mid: self.control_board.positions.copy() for mid in marker_positions.keys()}
 
-                self._update_status("Verifying calibration...")
+                self._call_ui(self._update_status, "Verifying calibration...")
 
                 verified_results = {}
 
@@ -209,13 +267,12 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     if self._cancel_requested:
                         break
 
-                    # Safety limits
+                    # Safety limits and verification tuning
                     tolerance_mm = 5.0
                     consecutive_successes = 0
                     attempts = 0
-                    max_attempts = 15
+                    max_attempts = 20
 
-                    # Gantry position recorded at initial scan (do NOT alter)
                     recorded_gantry = recorded_gantry_positions.get(marker_id, self.control_board.positions.copy())
 
                     self.logger.info(f"Verifying Marker {marker_id} (relative camera pos x={rel_pos['x']:.3f} y={rel_pos['y']:.3f} z={rel_pos['z']:.3f}); recorded gantry {recorded_gantry}")
@@ -223,12 +280,6 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     while consecutive_successes < 3 and attempts < max_attempts and not self._cancel_requested:
                         attempts += 1
                         self._call_ui(self._update_status, f"Attempt {attempts}: Homing and verifying Marker {marker_id}...")
-
-                        # Pause the live camera UI so the worker can use the capture safely
-                        self._call_ui(self._stop_camera_display)
-                        # Give mainloop a moment to process the stop
-                        import time as _time
-                        _time.sleep(0.05)
 
                         # Home the gantry (use toolhead if available for safer homing)
                         try:
@@ -239,50 +290,53 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                                 self.control_board.finish_moves()
                         except Exception as e:
                             self.logger.exception(f"Failed to home gantry on attempt {attempts} for Marker {marker_id}: {e}")
-                            # small delay then retry
-                            _time.sleep(0.2)
+                            time.sleep(0.3)
                             consecutive_successes = 0
                             continue
 
-                        # After homing, move to the recorded gantry position
-                        # that was saved during the initial scan. This ensures the
-                        # gantry goes to the same physical coordinates used when
-                        # the marker was first seen. DO NOT use any 'absolute'
-                        # aruco coordinates to command motion.
+                        # Move to the recorded gantry position and ensure the move finished
                         try:
                             target = recorded_gantry
                             self.logger.debug(f"Moving to recorded gantry pos for Marker {marker_id}: {target}")
                             if hasattr(self.dispatcher, 'toolhead') and self.dispatcher.toolhead is not None:
-                                # toolhead.move_to expects mm coordinates (X/Y/Z)
                                 self.dispatcher.toolhead.move_to(x=target['X'], y=target['Y'], z=target['Z'], relative=False, feedrate=2000, coordinated=True)
                             else:
-                                # Fall back to per-axis moves if toolhead not available
                                 self.control_board.move_axis('Z', target['Z'], feedrate_mm_per_minute=600)
                                 self.control_board.move_axis('X', target['X'], feedrate_mm_per_minute=2000)
                                 self.control_board.move_axis('Y', target['Y'], feedrate_mm_per_minute=2000)
+                            # Request position update to refresh `self.control_board.positions`
+                            try:
+                                self.control_board.request_position()
+                            except Exception:
+                                pass
                         except Exception as e:
                             self.logger.exception(f"Failed to move to recorded gantry pos for Marker {marker_id} on attempt {attempts}: {e}")
                             consecutive_successes = 0
-                            _time.sleep(0.2)
+                            time.sleep(0.3)
                             continue
 
-                        # Short settle
-                        _time.sleep(0.2)
+                        # Longer settle to allow mechanical vibration to die out
+                        time.sleep(0.6)
 
-                        # Now scan briefly for the marker at the moved position
-                        scan_start = _time.time()
+                        # Now scan briefly for the marker at the moved position using
+                        # the UI-updated frame buffer (avoid direct VideoCapture reads).
+                        scan_start = time.time()
                         detections = []
-                        scan_timeout = 1.0
-                        failed_reads = 0
-                        while _time.time() - scan_start < scan_timeout and not self._cancel_requested:
-                            ret, frame = cap.read()
-                            if not ret:
-                                failed_reads += 1
+                        scan_timeout = 2.0
+                        while time.time() - scan_start < scan_timeout and not self._cancel_requested:
+                            with self._frame_lock:
+                                frame = None if self._last_frame is None else self._last_frame.copy()
+                            if frame is None:
+                                time.sleep(0.02)
                                 continue
                             result = self.aruco_detector.detect_markers(frame)
+                            # Show annotated frame during verification
+                            if result and 'frame' in result:
+                                self._call_ui(self._show_frame_on_ui, result['frame'])
                             for m in result['markers']:
                                 if m['id'] == marker_id:
                                     detections.append(m['position'])
+                            time.sleep(0.02)
 
                         if not detections:
                             self.logger.warning(f"Marker {marker_id} not detected on attempt {attempts}")
@@ -296,12 +350,6 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             'z': sum(p['z'] for p in detections) / len(detections)
                         }
 
-
-                        # Compare the observed relative marker position with the
-                        # originally recorded relative position. This comparison
-                        # is independent of any absolute aruco coordinate system
-                        # and ensures the marker appears in the same place from
-                        # the camera POV when the gantry is at the recorded pos.
                         dx = abs((avg_rel['x'] - rel_pos['x']) * 1000)
                         dy = abs((avg_rel['y'] - rel_pos['y']) * 1000)
                         dz = abs((avg_rel['z'] - rel_pos['z']) * 1000)
@@ -316,18 +364,10 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             self.logger.info(f"Marker {marker_id} verification failed on attempt {attempts}: dx={dx:.2f} dy={dy:.2f} dz={dz:.2f}")
 
                         # Small delay to allow UI to update if needed
-                        _time.sleep(0.1)
+                        time.sleep(0.1)
 
                     # End attempts for this marker
                     if consecutive_successes >= 3:
-                        # Save verification results. Store the original
-                        # `relative_position` (camera frame), the computed
-                        # `abs_aruco_position` (gantry coords where the aruco
-                        # marker is located computed from the recorded gantry
-                        # position), and the recorded gantry position used as
-                        # reference. Do NOT modify the physical gantry
-                        # coordinate system here — the stored values are for
-                        # reference only.
                         abs_aruco_position = {
                             'x': recorded_gantry['X'] + rel_pos['x'] * 1000,
                             'y': recorded_gantry['Y'] + rel_pos['y'] * 1000,
@@ -346,31 +386,31 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     else:
                         self.logger.warning(f"Marker {marker_id} verification unsuccessful after {attempts} attempts")
 
-                    # Resume camera display for UI
-                    self._call_ui(self._start_camera_display)
-
                 if self._cancel_requested:
                     break
 
                 if not verified_results:
-                    self._update_status("No verified markers, retrying scan.")
+                    self._call_ui(self._update_status, "No verified markers, retrying scan.")
                     time.sleep(1.0)
                     continue
 
-                # Save to pending calibrations and update UI
-                self.pending_calibrations.update(verified_results)
-                self._update_status(f"Calibration complete: {len(verified_results)} marker(s) pending save.")
-                self._update_ui()
+                # Save to pending calibrations and update UI on the main thread
+                def _finish_save():
+                    self.pending_calibrations.update(verified_results)
+                    self._update_status(f"Calibration complete: {len(verified_results)} marker(s) pending save.")
+                    self._update_ui()
+
+                self._call_ui(_finish_save)
                 return
 
             if self._cancel_requested:
-                self._update_status("Calibration cancelled by user")
+                self._call_ui(self._update_status, "Calibration cancelled by user")
 
         except Exception as e:
             self.logger.error(f"Calibration error: {e}")
-            self._update_status(f"Error: {e}")
+            self._call_ui(self._update_status, f"Error: {e}")
         finally:
-            self._reset_calibration()
+            self._call_ui(self._reset_calibration)
     
     def _home_gantry(self):
         """Home the gantry to origin"""
