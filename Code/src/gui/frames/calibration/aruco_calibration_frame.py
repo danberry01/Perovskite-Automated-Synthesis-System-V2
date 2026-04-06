@@ -316,7 +316,15 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             continue
 
                         # Longer settle to allow mechanical vibration to die out
-                        time.sleep(0.6)
+                        # Wait for a fresh frame after motion
+                        last_frame_id = id(self._last_frame)
+
+                        timeout = time.time() + 1.5
+                        while time.time() < timeout:
+                            with self._frame_lock:
+                                if self._last_frame is not None and id(self._last_frame) != last_frame_id:
+                                    break
+                            time.sleep(0.01)
 
                         # Now scan briefly for the marker at the moved position using
                         # the UI-updated frame buffer (avoid direct VideoCapture reads).
