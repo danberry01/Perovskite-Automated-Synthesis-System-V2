@@ -2,6 +2,9 @@ from time import sleep
 from inspect import signature
 import logging
 import numpy as np
+import json
+import os
+import time
 
 from drivers.procedure_file_driver import ProcedureFile
 from objects.toolhead import Toolhead
@@ -25,6 +28,7 @@ class MoveRegistry():
     def __init__(self, dispatcher):
         self.logger = logging.getLogger("Main Logger")
         
+        self.dispatcher = dispatcher
         self.toolhead = dispatcher.toolhead
         # Keep a reference to the low-level control board for emergency control
         try:
@@ -52,6 +56,7 @@ class MoveRegistry():
             "log": self.log,
             "wait": self.wait,
             "home": self.home,
+            "aruco_home": self.aruco_home,
             
             "move_toolhead": self.move_toolhead,
             "move_to_location": self.move_to_location,
@@ -269,6 +274,172 @@ class MoveRegistry():
         # Use per-axis moves for reliability
         self.toolhead.move_to(x=x, y=y, z=z, relative=rrelative, feedrate=1000)
         
+    def aruco_home(self):
+        """Verify gantry using saved ArUco calibrations and iteratively nudge
+        the toolhead so the saved absolute marker position matches the
+        currently observed marker. The algorithm:
+        - Scan camera for ArUco markers
+        - If any detected marker matches a saved permanent calibration, pick it
+        - Compute test absolute position = initial_gantry + relative_marker*1000
+        - Compare against saved absolute position (gold standard)
+        - If outside tolerance, compute a small relative move (per-axis) equal
+          to the error (clipped by a small step) and perform the relative move
+          of the toolhead. Re-scan and repeat until within tolerance or max
+          iterations.
+
+        This method intentionally uses the initial gantry snapshot for
+        calculation so that the recalculated test value after a small camera
+        nudge uses the same gantry reference (see design notes).
+        """
+        # Config
+        calibration_file = "calibration_data/aruco_calibrations.json"
+        scan_timeout_s = 2.0
+        rescan_timeout_s = 1.0
+        tolerance_mm = 1.0
+        max_iterations = 50
+        max_step_mm = 0.5
+
+        # Basic checks
+        if not getattr(self, 'camera', None) or not self.camera.is_connected():
+            self.logger.warning("aruco_home: camera not connected")
+            return
+
+        if not getattr(self, 'control_board', None):
+            raise Exception("Control board not available for aruco_home")
+
+        if not getattr(self, 'toolhead', None):
+            raise Exception("Toolhead not available for aruco_home")
+
+        # Load saved calibrations
+        try:
+            if not os.path.exists(calibration_file):
+                self.logger.info("aruco_home: no saved calibrations found")
+                return
+
+            with open(calibration_file, 'r', encoding='utf-8') as f:
+                saved = json.load(f)
+                # keys in file may be strings
+                saved = {int(k): v for k, v in saved.items()}
+        except Exception as e:
+            self.logger.exception(f"aruco_home: failed to load calibration file: {e}")
+            return
+
+        # Helper: perform a short scan and aggregate detections
+        def scan_for_markers(timeout_s: float):
+            end_t = time.time() + timeout_s
+            detections = {}
+            while time.time() < end_t:
+                frame = self.camera.get_frame()
+                if frame is None:
+                    sleep(0.02)
+                    continue
+                try:
+                    result = getattr(self.dispatcher, 'aruco_detector', None).detect_markers(frame)
+                except Exception as e:
+                    self.logger.debug(f"aruco_home: detector error: {e}")
+                    sleep(0.02)
+                    continue
+
+                for m in result.get('markers', []):
+                    mid = m['id']
+                    pos = m['position']
+                    detections.setdefault(mid, []).append(pos)
+
+                # small sleep to yield
+                sleep(0.01)
+
+            # Average positions
+            avg = {}
+            for mid, pts in detections.items():
+                avg[mid] = {
+                    'x': sum(p['x'] for p in pts) / len(pts),
+                    'y': sum(p['y'] for p in pts) / len(pts),
+                    'z': sum(p['z'] for p in pts) / len(pts),
+                }
+            return avg
+
+        # Initial scan
+        detected = scan_for_markers(scan_timeout_s)
+        if not detected:
+            self.logger.info("aruco_home: no markers detected")
+            return
+
+        # Find first detected marker that exists in saved calibrations
+        matched_id = None
+        for mid in detected.keys():
+            if mid in saved:
+                matched_id = mid
+                break
+
+        if matched_id is None:
+            self.logger.info("aruco_home: no detected markers match saved calibrations")
+            return
+
+        saved_entry = saved[matched_id]
+        saved_abs = saved_entry.get('abs_aruco_position') or saved_entry.get('absolute_position')
+        if not saved_abs:
+            self.logger.warning(f"aruco_home: saved calibration for {matched_id} missing absolute position")
+            return
+
+        # snapshot gantry positions (do not update this during iterative checks)
+        initial_gantry = self.control_board.positions.copy()
+
+        # compute initial averaged relative marker position
+        rel = detected[matched_id]
+
+        def rel_to_abs(rel_pos, gantry_ref):
+            return {
+                'x': gantry_ref['X'] + rel_pos['x'] * 1000.0,
+                'y': gantry_ref['Y'] + rel_pos['y'] * 1000.0,
+                'z': gantry_ref['Z'] + rel_pos['z'] * 1000.0,
+            }
+
+        # iterative alignment loop
+        iteration = 0
+        while iteration < max_iterations:
+            iteration += 1
+
+            test_abs = rel_to_abs(rel, initial_gantry)
+            err_x = test_abs['x'] - saved_abs['x']
+            err_y = test_abs['y'] - saved_abs['y']
+            err_z = test_abs['z'] - saved_abs['z']
+
+            self.logger.info(f"aruco_home: Iter {iteration} Marker {matched_id} err(mm) x={err_x:.3f} y={err_y:.3f} z={err_z:.3f}")
+
+            # Check tolerance
+            if abs(err_x) <= tolerance_mm and abs(err_y) <= tolerance_mm and abs(err_z) <= tolerance_mm:
+                self.logger.info("aruco_home: marker aligned within tolerance")
+                return
+
+            # Compute step (move camera by delta = test_abs - saved_abs, clipped)
+            step_x = max(-max_step_mm, min(max_step_mm, err_x))
+            step_y = max(-max_step_mm, min(max_step_mm, err_y))
+            step_z = max(-max_step_mm, min(max_step_mm, err_z))
+
+            # If steps are negligibly small but still outside tolerance, break
+            if abs(step_x) < 0.001 and abs(step_y) < 0.001 and abs(step_z) < 0.001:
+                self.logger.warning("aruco_home: required step below threshold but still out of tolerance; aborting")
+                return
+
+            # Perform relative move
+            try:
+                self.logger.debug(f"aruco_home: moving relative x={step_x} y={step_y} z={step_z}")
+                # move_toolhead expects relative as integer >=1
+                self.move_toolhead(step_x, step_y, step_z, 1)
+            except Exception as e:
+                self.logger.exception(f"aruco_home: failed to perform relative move: {e}")
+                return
+
+            # allow motion settle
+            sleep(0.15)
+
+            # Rescan to update relative position (note: use initial_gantry for comparisons)
+            rel = scan_for_markers(rescan_timeout_s).get(matched_id)
+            if not rel:
+                self.logger.warning("aruco_home: marker lost after move, aborting")
+                return
+
+        self.logger.warning("aruco_home: max iterations reached without alignment")
     def move_to_location(self, destination: str):
         self.validate_location(destination)
 
