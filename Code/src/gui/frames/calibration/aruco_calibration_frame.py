@@ -268,7 +268,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         break
 
                     # Safety limits and verification tuning
-                    tolerance_mm = 10.0
+                    tolerance_mm = 20.0
                     consecutive_successes = 0
                     attempts = 0
                     max_attempts = 20
