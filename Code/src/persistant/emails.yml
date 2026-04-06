@@ -12,5 +12,6 @@ smtp:
 from: pass@localhost
 
 recipients:
-  - user@example.com
   - dcounte1@binghamton.edu
+  - user@example.com
+  
