@@ -319,7 +319,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         # Wait for a fresh frame after motion
                         last_frame_id = id(self._last_frame)
 
-                        timeout = time.time() + 1.5
+                        timeout = time.time() + 5.0
                         while time.time() < timeout:
                             with self._frame_lock:
                                 if self._last_frame is not None and id(self._last_frame) != last_frame_id:
@@ -330,7 +330,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         # the UI-updated frame buffer (avoid direct VideoCapture reads).
                         scan_start = time.time()
                         detections = []
-                        scan_timeout = 2.0
+                        scan_timeout = 5.0
                         while time.time() - scan_start < scan_timeout and not self._cancel_requested:
                             with self._frame_lock:
                                 frame = None if self._last_frame is None else self._last_frame.copy()

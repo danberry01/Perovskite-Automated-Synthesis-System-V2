@@ -13,5 +13,4 @@ from: pass@localhost
 
 recipients:
   - dcounte1@binghamton.edu
-  - user@example.com
   
