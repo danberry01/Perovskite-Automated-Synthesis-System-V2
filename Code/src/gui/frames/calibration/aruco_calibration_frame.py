@@ -94,8 +94,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         frame = result['frame']
         
         # Log detection results
-        if result['count'] > 0:
-            self.logger.debug(f"Detected {result['count']} markers")
+        # if result['count'] > 0:
+        #     self.logger.debug(f"Detected {result['count']} markers")
         
         # Store a copy of the raw frame for the worker to use (avoid
         # concurrent reads from the VideoCapture). Use a lock for safety.
@@ -268,7 +268,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         break
 
                     # Safety limits and verification tuning
-                    tolerance_mm = 5.0
+                    tolerance_mm = 10.0
                     consecutive_successes = 0
                     attempts = 0
                     max_attempts = 20
