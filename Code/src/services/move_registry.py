@@ -451,11 +451,10 @@ class MoveRegistry():
                 y = location[2]
                 z = location[3]
                 
-                self.toolhead.move_axis("X", x)
+                self.toolhead.move_axis("Z", 142)
                 sleep(1)
-                self.toolhead.move_axis("Y", y)
+                self.toolhead.move_to(x=x, y=y, relative=0, feedrate=1000)
                 sleep(1)
-                
                 self.toolhead.move_axis("Z", z)
                 sleep(1)
                 
