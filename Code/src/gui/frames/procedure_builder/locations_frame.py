@@ -101,6 +101,6 @@ if __name__ == "__main__":
     app = ctk.CTk()
     ctk.set_appearance_mode("dark")
     app.geometry("1200x1000")
-    lf = LocationFrame(app)
+    lf = LocationsFrame(app)
     lf.grid(row=0, column=0)
     app.mainloop()

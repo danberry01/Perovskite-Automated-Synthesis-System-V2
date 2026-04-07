@@ -440,6 +440,7 @@ class MoveRegistry():
                 return
 
         self.logger.warning("aruco_home: max iterations reached without alignment")
+
     def move_to_location(self, destination: str):
         self.validate_location(destination)
 
@@ -451,11 +452,11 @@ class MoveRegistry():
                 y = location[2]
                 z = location[3]
                 
-                self.toolhead.move_axis("Z", 142)
+                self.toolhead.move_to(z=142, relative=0, feedrate=1000)
                 sleep(1)
                 self.toolhead.move_to(x=x, y=y, relative=0, feedrate=1000)
                 sleep(1)
-                self.toolhead.move_axis("Z", z)
+                self.toolhead.move_to(z=z, relative=0, feedrate=1000)
                 sleep(1)
                 
                 break
