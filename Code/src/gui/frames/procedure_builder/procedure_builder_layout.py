@@ -18,8 +18,8 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
         self.queue_frame = queue_frame
 
         self.columnconfigure(0, weight = 1, minsize = 500)
-        self.columnconfigure(1, weight = 0, minsize = 600)
-        self.columnconfigure(2, weight = 0, minsize = 300)
+        self.columnconfigure(1, weight = 0, minsize = 300)
+        self.columnconfigure(2, weight = 0)
         
         self.rowconfigure(0, weight = 0)
         self.rowconfigure(1, weight = 0)
@@ -37,7 +37,7 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
         
         # Directory selector frame
         self.dir_config_frame = ctk.CTkFrame(self, fg_color=FOREGROUND_COLOR, corner_radius=0)
-        self.dir_config_frame.grid(row = 0, column = 1, padx = 10, pady = 10, sticky = "ew")
+        self.dir_config_frame.grid(row = 0, column = 1, columnspan = 2, padx = 10, pady = 10, sticky = "ew")
         
         self.dir_label = ctk.CTkLabel(
             self.dir_config_frame,
@@ -68,7 +68,7 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
         self.dir_select_button.pack(fill="x", padx=10, pady=(5, 10))
         
         self.connection_frame = ConnectionFrame(master = self, dispatcher = self.dispatcher)
-        self.connection_frame.grid(row = 1, column = 1, padx = 10, pady = 10, sticky = "nsew")
+        self.connection_frame.grid(row = 1, column = 1, columnspan = 2, padx = 10, pady = 10, sticky = "nsew")
 
         self.locations_frame = LocationsFrame(master = self)
         self.locations_frame.grid(row = 2, column = 1, rowspan = 2, padx = 10, pady = 10, sticky = "nsew")
