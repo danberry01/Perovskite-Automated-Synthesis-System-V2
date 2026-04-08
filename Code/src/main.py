@@ -23,24 +23,14 @@ from objects.pippete import Pipette, PipetteHandler
 from objects.toolhead import Toolhead
 
 from core.dispatcher import Dispatcher
-# -- GUI IMPORT --
-# from guiFrames.console_frame import ConsoleFrame
-# from guiFrames.procedure_frame import ProcedureFrame
-# from guiFrames.info_frame import InfoFrame
-# from guiFrames.camera_frame import CameraFrame
-# from guiFrames.conection_frame import ConnectionFrame
-# from guiFrames.procedure_builder_frame import ProcedureBuilderFrame
-# from guiFrames.spectrometer_frame import SpectrometerFrame
-# from guiFrames.locations_frame import LocationFrame
-# from guiFrames.ml_model_frame import MLModelFrame
 
 from services.procedure_handler import ProcedureHandler
 from services.move_registry import MoveRegistry
 from gui import App
 
 if __name__ == "__main__":
-    # #enable software pwm
-    # Device.pin_factory = PiGPIOFactory()
+    # enable software pwm
+    Device.pin_factory = PiGPIOFactory()
     
     # -- LOGGING --
     # Add custom CAMERA logging level for camera/marker updates
@@ -64,64 +54,23 @@ if __name__ == "__main__":
     
     move_registry.spectrometer_frame = app.tab_view_frame.procedure_viewer_frame.spectrometer_frame
 
-        # # # creating frames
-    # # procedure_frame = ProcedureFrame(app, procedure_handler)
-    # # console_frame = ConsoleFrame(app)
-    # # connection_frame = ConnectionFrame(app, control_board,spin_coater,hotplate,camera,spectrometer)
-    # # camera_frame = CameraFrame(app, camera)
-    # # info_frame = InfoFrame(app, control_board, hotplate, pipette_handler, vial_carousel)
-    # # procedure_builder_frame = ProcedureBuilderFrame(app, dispatcher.move_dict, procedure_handler)
-    # # location_frame = LocationFrame(master=app)
-    # # # ml_model_frame = MLModelFrame(app, width=370)
-
-    # # program stalls when not everything is connected and this is called
-    # # # connect to devices
-    # # spectrometer.connect()
-    # # control_board.connect()
-    # # camera.connect()
-    # # spin_coater.connect()
-    # # hotplate.connect()
-    
+    # program stalls when not everything is connected and this is called
+    # connect to devices
+    dispatcher.spectrometer.connect()
+    dispatcher.control_board.connect()
+    dispatcher.camera.connect()
+    dispatcher.spin_coater.connect()
+    dispatcher.hotplate.connect()
     
 
-    
-    
-    # # --------LOAD DEFAULT PROCEDURE--------
-    # procedure_config = ProcedureFile().Open("procedures/default_procedure.yml")
-    # if procedure_config is not None:
-    #     move_list = procedure_config["Procedure"]
-    #     procedure_handler.set_procedure(move_list)
-    # else:
-    #     logger.warning("Default procedure not found")
-
-
-    # # # trying to make an icon 
-    # # icon = PhotoImage(file="guiImages/logo.png")
-    # # app.wm_iconphoto(True, icon)
-
-
-    
-    # # # putting the frames on the gui
-    # # procedure_frame.grid(row=0, column=0, padx=5, pady=5,sticky="nsew")
-    # # connection_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-    # # spectrometer_frame.grid(row=0, column=2, padx=10, pady=10, sticky="nsew")
-    # # console_frame.grid(row=1, column=0, padx=5, pady=5,sticky="nsew")
-    # # procedure_builder_frame.grid(row=1, column=1, rowspan=2, sticky="nsew")
-    # # camera_frame.grid(row=1, column=2, padx=5, pady=5,sticky="new")
-    # # info_frame.grid(row=2, column=0, padx=5, pady=5, sticky="new")
-    # # location_frame.grid(row=2, column=2,padx=5, pady=5, sticky="new")
-    # # # ml_model_frame.grid(row=1, column=2, padx=5, pady=5,sticky="new")
-
-    # # # run the gui
-    # # hotplate.set_temperature(0)
     app.mainloop()
     
-    # # -- CLEANUP --
-    # hotplate.set_temperature(0)
-    # sleep(1)
+    # -- CLEANUP --
+    dispatcher.hotplate.set_temperature(0)
+    sleep(1)
     
-    # control_board.disconnect()
-    # spectrometer.disconnect()
-    # spin_coater.disconnect()
-    # camera.disconnect()
-    # hotplate.disconnect()
+    dispatcher.control_board.disconnect()
+    dispatcher.spectrometer.disconnect()
+    dispatcher.spin_coater.disconnect()
+    dispatcher.camera.disconnect()
+    dispatcher.hotplate.disconnect()
