@@ -5,6 +5,7 @@ from ...components.constants import *
 from .procedure_drafter_frame import ProcedureDrafterFrame
 from .locations_frame import LocationsFrame
 from .connection_frame import ConnectionFrame
+from .obstacles_frame import ObstaclesFrame
 
 class ProcedureBuilderFrame(ctk.CTkFrame):
     """Complete interface for creating, saving, loading, and editing procedures"""
@@ -18,6 +19,7 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
 
         self.columnconfigure(0, weight = 1, minsize = 500)
         self.columnconfigure(1, weight = 0, minsize = 600)
+        self.columnconfigure(2, weight = 0, minsize = 300)
         
         self.rowconfigure(0, weight = 0)
         self.rowconfigure(1, weight = 0)
@@ -70,6 +72,9 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
 
         self.locations_frame = LocationsFrame(master = self)
         self.locations_frame.grid(row = 2, column = 1, rowspan = 2, padx = 10, pady = 10, sticky = "nsew")
+
+        self.obstacles_frame = ObstaclesFrame(master = self)
+        self.obstacles_frame.grid(row = 2, column = 2, rowspan = 2, padx = 10, pady = 10, sticky = "nsew")
     
     def _change_procedures_dir(self):
         """Allow user to change the procedures directory"""

@@ -3,6 +3,7 @@ from time import sleep
 import serial
 import serial.threaded
 import threading
+
 # SPINCOATER COMMANDS
 # spc set pcmode
 # spc add step {rpm} {time}
@@ -87,31 +88,33 @@ class SpinCoater():
         self.send_message("spc stop")
         
     def run(self, wait_to_finish: bool = False, timeout: float = 120.0):
-        """Start the spincoater run and optionally wait for completion.
+        """Start the spincoater run and optionally wait for completion."""
+        
+        # ✅ FIX 1: clear event BEFORE sending run (avoid race condition)
+        self.done.clear()
 
-        Args:
-            wait_to_finish (bool): If True, block until the spincoater signals completion.
-            timeout (float): Maximum seconds to wait before raising TimeoutError.
-        """
         # mark running and start
         try:
             self.is_running = True
         except Exception:
             pass
+
         self.send_message("spc run")
-        self.done.clear()
+
         if wait_to_finish:
             finished = self.done.wait(timeout=timeout)
             if not finished:
                 self.logger.error("SpinCoater run timed out")
                 raise TimeoutError("SpinCoater run timed out")
-            # if we waited and finished (or timed out) clear running flag
+
+            # mark not running after completion
             try:
                 self.is_running = False
             except Exception:
                 pass
-        # clear configured steps once run completes (or was started)
-        self.clear_steps()
+
+            # ✅ FIX 2: only clear steps AFTER run completes
+            self.clear_steps()
         
     def add_step(self, rpm: int, time_seconds:float):
         # remember last rpm for UI/status

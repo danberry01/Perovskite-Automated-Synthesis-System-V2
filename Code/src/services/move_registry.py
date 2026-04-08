@@ -21,6 +21,7 @@ from drivers.spincoater_driver import SpinCoater
 from drivers.spectrometer_driver import Spectrometer
 from drivers.procedure_file_driver import ProcedureFile
 from services.image_processing import ImageProcessor
+from drivers.a_star_driver import AStarPlanner
 
 class MoveRegistry():
     
@@ -59,6 +60,7 @@ class MoveRegistry():
             "aruco_home": self.aruco_home,
             
             "move_toolhead": self.move_toolhead,
+            "soft_limit_axis_move": self.soft_limit_axis_move,
             "move_to_location": self.move_to_location,
             
             "set_temperature": self.set_temperature,
@@ -273,6 +275,82 @@ class MoveRegistry():
 
         # Use per-axis moves for reliability
         self.toolhead.move_to(x=x, y=y, z=z, relative=rrelative, feedrate=1000)
+        
+    def soft_limit_axis_move(self, x: float, y: float, z: float, relative: int):
+        """Move to a target while avoiding obstacles listed in persistant/obstacles.yml.
+
+        This performs a coarse A* plan in XY (using `AStarPlanner`) and follows
+        the returned waypoints while keeping Z at a safe height until the XY
+        travel is complete.
+        """
+        self.logger.info(f"soft_limit_axis_move: x={x}, y={y}, z={z}, relative={relative}")
+
+        if not getattr(self, 'toolhead', None):
+            raise Exception("Toolhead not available for soft_limit_axis_move")
+
+        # fetch current position
+        try:
+            cx = float(self.toolhead.get_position('X') or 0)
+            cy = float(self.toolhead.get_position('Y') or 0)
+            cz = float(self.toolhead.get_position('Z') or 0)
+        except Exception:
+            raise Exception("Unable to read current toolhead position")
+
+        # compute absolute target
+        try:
+            if int(relative) >= 1:
+                tx = cx + float(x)
+                ty = cy + float(y)
+                tz = cz + float(z)
+            else:
+                tx = float(x)
+                ty = float(y)
+                tz = float(z)
+        except Exception as e:
+            raise ValueError(f"Invalid target coordinates: {e}")
+
+        # load obstacles
+        pf = ProcedureFile()
+        obstacles = pf.Open('persistant/obstacles.yml') or pf.Open('persistant/obstacles')
+
+        planner = AStarPlanner()
+        path = None
+        try:
+            path = planner.plan((cx, cy, cz), (tx, ty, tz), raw_obstacles=obstacles)
+        except Exception as e:
+            # planning failed; log and fall back to direct motion
+            self.logger.debug(f"soft_limit_axis_move: planning failed: {e}")
+            path = None
+
+        # Move to safe Z before XY travel
+        SAFE_Z = 200
+        try:
+            # only raise if below SAFE_Z to reduce unnecessary moves
+            if cz < SAFE_Z:
+                self.toolhead.move_axis("Z", SAFE_Z)
+        except Exception as e:
+            self.logger.exception(f"soft_limit_axis_move: failed to raise to SAFE_Z: {e}")
+
+        # Follow planned XY path or fallback direct move
+        try:
+            if path and len(path) >= 2:
+                # path contains start and goal; skip first (current)
+                for px, py in path[1:]:
+                    self.toolhead.move_to(x=px, y=py, relative=False, feedrate=800)
+            else:
+                # No obstacles or planning failed: direct XY move
+                self.logger.info("soft_limit_axis_move: no plan found, performing direct XY move")
+                self.toolhead.move_to(x=tx, y=ty, relative=False, feedrate=1000)
+        except Exception as e:
+            self.logger.exception(f"soft_limit_axis_move: XY movement failed: {e}")
+            raise
+
+        # Move to requested Z at the end
+        try:
+            self.toolhead.move_axis("Z", tz)
+        except Exception as e:
+            self.logger.exception(f"soft_limit_axis_move: final Z move failed: {e}")
+            raise
         
     def aruco_home(self):
         """Verify gantry using saved ArUco calibrations and iteratively nudge
