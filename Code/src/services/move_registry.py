@@ -755,7 +755,7 @@ class MoveRegistry():
         # rasie toolhead to avoid collisions
 
         current_pipette = self.pipette_handler.get_pippete_index()
-        self.toolhead.move_axis("Z", 200)
+        self.toolhead.move_axis("Z", 145)
         
         #self.move_to_location("pipette pickup")
         #move in front of first pipette stand

@@ -285,9 +285,6 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         try:
                             if hasattr(self.dispatcher, 'toolhead') and self.dispatcher.toolhead is not None:
                                 self.dispatcher.toolhead.home()
-                            else:
-                                self.control_board.send_message("G28", require_lock=True)
-                                self.control_board.finish_moves()
                         except Exception as e:
                             self.logger.exception(f"Failed to home gantry on attempt {attempts} for Marker {marker_id}: {e}")
                             time.sleep(0.3)
