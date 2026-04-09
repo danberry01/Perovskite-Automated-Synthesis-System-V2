@@ -395,9 +395,11 @@ class MoveRegistry():
                 return
 
             with open(calibration_file, 'r', encoding='utf-8') as f:
-                saved = json.load(f)
-                # keys in file may be strings
-                saved = {int(k): v for k, v in saved.items()}
+                content = f.read().strip()
+                if not content:
+                    self.logger.warning("Calibration file is empty")
+                    return
+                saved = json.loads(content)
         except Exception as e:
             self.logger.exception(f"aruco_home: failed to load calibration file: {e}")
             return

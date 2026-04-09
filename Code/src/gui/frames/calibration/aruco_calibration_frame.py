@@ -633,6 +633,14 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             self._update_ui()
         except Exception as e:
             self.logger.error(f"Failed to load calibration data: {e}")
+
+            # Backup corrupted file
+            try:
+                os.rename(self.calibration_file, self.calibration_file + ".corrupt")
+                self.logger.warning("Corrupted calibration file renamed to .corrupt")
+            except Exception:
+                pass
+
             self.calibration_data = {}
     
     def _save_calibration_data(self):
