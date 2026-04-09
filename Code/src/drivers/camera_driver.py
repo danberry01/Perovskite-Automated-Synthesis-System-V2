@@ -13,29 +13,53 @@ class Camera(threading.Thread):
 
         self.video_capture = None
         self.frame = None
-        
+        self._frame_lock = threading.Lock()
+
         self.running = threading.Event()
         self.release = threading.Event()
+        self._preferred_width = None
+        self._preferred_height = None
         self.start()
         
 
-    def connect(self):
+    def connect(self, device_index: int = 0, width: int = None, height: int = None):
+        """Open the underlying VideoCapture and start the reader loop.
+
+        Args:
+            device_index: camera device index (default 0)
+            width: optional preferred frame width in pixels
+            height: optional preferred frame height in pixels
+        """
         if self.is_connected():
             self.logger.error("Camera is already connected")
-            return 
-        
+            return False
+
         try:
-            self.video_capture = cv2.VideoCapture(0) # DSHOW for windows only, otherwise try V42L
+            self.video_capture = cv2.VideoCapture(device_index)
+            if not self.video_capture.isOpened():
+                self.logger.error(f"Failed to open VideoCapture({device_index})")
+                self.video_capture = None
+                return False
+
+            # apply preferred resolution if provided or previously stored
+            if width is not None and height is not None:
+                self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, int(width))
+                self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, int(height))
+            elif self._preferred_width and self._preferred_height:
+                self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, int(self._preferred_width))
+                self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, int(self._preferred_height))
+
             self.running.set()
             self.logger.debug("Connected to camera")
+            return True
         except cv2.error as e:
             self.logger.error(f"Error connecting to camera: {e}")
+            return False
             
             
     def disconnect(self):
         if not self.is_connected():
             return
-        
         self.running.clear()
         self.release.set()
         self.logger.debug("Camera stopped")
@@ -52,9 +76,18 @@ class Camera(threading.Thread):
                 try:
                     ret, frame = self.video_capture.read()
                     if ret is True:
-                        self.frame = frame
+                        try:
+                            with self._frame_lock:
+                                self.frame = frame.copy()
+                        except Exception:
+                            with self._frame_lock:
+                                self.frame = frame
                     else:
                         self.logger.error(f"Camera stopped returning frames")
+                        try:
+                            self.video_capture.release()
+                        except Exception:
+                            pass
                         self.video_capture = None
                         self.running.clear()
                         break
@@ -63,13 +96,24 @@ class Camera(threading.Thread):
                     self.logger.error(f"Error while reading videocapture: {e}")
 
                 if self.release.is_set():
-                    self.video_capture.release()
+                    try:
+                        self.video_capture.release()
+                    except Exception:
+                        pass
                     self.video_capture = None
                 
             self.running.clear()
 
     def get_frame(self):
-        return self.frame
+        """Return the latest camera frame or None. Returns a copy to avoid
+        callers mutating the internal buffer."""
+        with self._frame_lock:
+            if self.frame is None:
+                return None
+            try:
+                return self.frame.copy()
+            except Exception:
+                return self.frame
     
     def is_connected(self):
         return (self.video_capture is not None) and (self.video_capture.isOpened())

@@ -14,7 +14,10 @@ class CameraFrame(ctk.CTkFrame):
         
         # Accept either dispatcher or direct instances for flexibility
         if dispatcher is not None:
-            self.myVideoCapture = dispatcher.video_capture
+            # Use the shared Camera driver instance instead of opening a
+            # separate VideoCapture. This prevents multiple handles to the
+            # same camera device.
+            self.camera = dispatcher.camera
             self.aruco_detector = dispatcher.aruco_detector
             self.width = dispatcher.camera_width
             self.height = dispatcher.camera_height
@@ -103,13 +106,19 @@ class CameraFrame(ctk.CTkFrame):
             self._video_feed_after_id = self.myVideoWidget.after(20, self.update_video_feed)
             return
 
-        # Reads one frame from the camera
-        ret, frame = self.myVideoCapture.read()
-
-        # Tells the function to rerun in 10ms if a frame is not detected
-        if not ret:
-            self._video_feed_after_id = self.myVideoWidget.after(10, self.update_video_feed)
-            return
+        # Reads one frame from the shared Camera (preferred) or fallback
+        frame = None
+        if hasattr(self, 'camera') and self.camera is not None:
+            frame = self.camera.get_frame()
+            if frame is None:
+                self._video_feed_after_id = self.myVideoWidget.after(10, self.update_video_feed)
+                return
+        else:
+            ret, frame = self.myVideoCapture.read()
+            # Tells the function to rerun in 10ms if a frame is not detected
+            if not ret:
+                self._video_feed_after_id = self.myVideoWidget.after(10, self.update_video_feed)
+                return
 
         # Process frame with ArUco detector driver
         result = self.aruco_detector.detect_markers(frame)

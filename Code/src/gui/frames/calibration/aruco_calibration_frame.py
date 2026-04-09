@@ -31,9 +31,9 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.dispatcher = dispatcher
         self.control_board: ControlBoard = dispatcher.control_board
         
-        # Use shared ArUco detector and video capture from dispatcher
+        # Use shared ArUco detector and Camera driver from dispatcher
         self.aruco_detector = dispatcher.aruco_detector
-        self.myVideoCapture = dispatcher.video_capture
+        self.camera = dispatcher.camera
         self.width = dispatcher.camera_width
         self.height = dispatcher.camera_height
         
@@ -83,9 +83,9 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             self._video_feed_after_id = self.camera_display.after(20, self._update_camera_display)
             return
         
-        # Read frame from shared video capture
-        ret, frame = self.myVideoCapture.read()
-        if not ret:
+        # Read frame from shared Camera driver
+        frame = self.camera.get_frame()
+        if frame is None:
             self._video_feed_after_id = self.camera_display.after(10, self._update_camera_display)
             return
         

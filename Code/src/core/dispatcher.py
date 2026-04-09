@@ -1,6 +1,4 @@
 
-import cv2
-
 from drivers.controlboard_driver import ControlBoard
 from drivers.spincoater_driver import SpinCoater
 from drivers.camera_driver import Camera
@@ -31,10 +29,6 @@ class Dispatcher:
         # Shared camera vision resources
         self.camera_width = 600
         self.camera_height = 400
-        self.video_capture = cv2.VideoCapture(0)
-        if self.video_capture.isOpened():
-            self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_width)
-            self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
         
         # Shared ArUco detector (created on demand to avoid re-initializing)
         self._aruco_detector = None
@@ -99,7 +93,9 @@ class Dispatcher:
         Connect to the camera through the Camera driver.
         Notifies all registered callbacks of the connection state change.
         """
-        self.camera.connect()
+        # Pass preferred resolution to the Camera driver so only one
+        # VideoCapture instance exists in the process.
+        self.camera.connect(width=self.camera_width, height=self.camera_height)
         is_connected = self.camera.is_connected()
         self._notify_camera_connection_changed(is_connected)
         return is_connected

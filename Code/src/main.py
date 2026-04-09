@@ -58,7 +58,8 @@ if __name__ == "__main__":
     # connect to devices
     dispatcher.spectrometer.connect()
     dispatcher.control_board.connect()
-    dispatcher.camera.connect()
+    # Use dispatcher helper so preferred resolution is applied to the Camera driver
+    dispatcher.connect_camera()
     dispatcher.spin_coater.connect()
     dispatcher.hotplate.connect()
     
