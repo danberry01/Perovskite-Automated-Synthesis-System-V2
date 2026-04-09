@@ -353,21 +353,7 @@ class MoveRegistry():
             raise
         
     def aruco_home(self):
-        """Verify gantry using saved ArUco calibrations and iteratively nudge
-        the toolhead so the saved absolute marker position matches the
-        currently observed marker. The algorithm:
-        - Scan camera for ArUco markers
-        - If any detected marker matches a saved permanent calibration, pick it
-        - Compute test absolute position = initial_gantry + relative_marker*1000
-        - Compare against saved absolute position (gold standard)
-        - If outside tolerance, compute a small relative move (per-axis) equal
-          to the error (clipped by a small step) and perform the relative move
-          of the toolhead. Re-scan and repeat until within tolerance or max
-          iterations.
-
-        This method intentionally uses the initial gantry snapshot for
-        calculation so that the recalculated test value after a small camera
-        nudge uses the same gantry reference (see design notes).
+        """Verify gantry using saved ArUco calibrations and move to set location
         """
         # Config
         calibration_file = "calibration_data/aruco_calibrations.json"
@@ -421,7 +407,7 @@ class MoveRegistry():
                     continue
 
                 for m in result.get('markers', []):
-                    mid = m['id']
+                    mid = int(m['id'])
                     pos = m['position']
                     detections.setdefault(mid, []).append(pos)
 
