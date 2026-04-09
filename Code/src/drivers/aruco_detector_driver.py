@@ -237,7 +237,7 @@ class ArucoDetector:
         """
         positions = {}
         for marker in markers:
-            positions[marker['id']] = marker['position']
+            positions[int(marker['id'])] = marker['position']
         return positions
     
     def log_detection_results(self, result: dict):
@@ -259,6 +259,6 @@ class ArucoDetector:
                 pos = marker['position']
                 self.logger.log(
                     CAMERA_LEVEL,
-                    f"  Marker {marker['id']}: X={pos['x']:.3f}m, "
+                    f"  Marker {int(marker['id'])}: X={pos['x']:.3f}m, "
                     f"Y={pos['y']:.3f}m, Z={pos['z']:.3f}m"
                 )

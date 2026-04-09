@@ -215,7 +215,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
 
                     if result['count'] > 0:
                         for marker in result['markers']:
-                            marker_id = marker['id']
+                            marker_id = int(marker['id'])
                             if marker_id not in detected_markers:
                                 detected_markers[marker_id] = []
                             detected_markers[marker_id].append(marker['position'])
@@ -644,12 +644,17 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             self.calibration_data = {}
     
     def _save_calibration_data(self):
-        """Save calibration data to file"""
         try:
             os.makedirs(os.path.dirname(self.calibration_file), exist_ok=True)
+
+            # Force all keys to valid JSON types
+            safe_data = {int(k): v for k, v in self.calibration_data.items()}
+
             with open(self.calibration_file, 'w') as f:
-                json.dump(self.calibration_data, f, indent=2)
-                self.logger.debug(f"Saved {len(self.calibration_data)} calibrations to file")
+                json.dump(safe_data, f, indent=2)
+
+            self.logger.debug(f"Saved {len(safe_data)} calibrations to file")
+
         except Exception as e:
             self.logger.error(f"Failed to save calibration data: {e}")
     
