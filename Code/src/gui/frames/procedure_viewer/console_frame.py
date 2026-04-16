@@ -15,6 +15,8 @@ class ConsoleFrame(ctk.CTkFrame):
         self._update_after_id = None
         self._is_paused = False
         self.current_filter = "DEBUG"  # Filter level for console display
+        self.log_history = []
+        self.max_history_lines = 5000
         
         self.logger = logging.getLogger("Main Logger")
         self.log_queue = Queue()
@@ -77,6 +79,8 @@ class ConsoleFrame(ctk.CTkFrame):
         if not self._is_paused:
             while not self.log_queue.empty():
                 msg = self.log_queue.get()
+
+                self._store_log_message(msg)
                 
                 # Filter messages based on current filter level
                 if self._should_display_message(msg):
@@ -87,6 +91,14 @@ class ConsoleFrame(ctk.CTkFrame):
         
         # Lower update frequency to reduce CPU usage while still keeping console responsive
         self._update_after_id = self.after(200, self._update)
+
+    def _store_log_message(self, msg: str):
+        self.log_history.append(msg)
+        if len(self.log_history) > self.max_history_lines:
+            self.log_history = self.log_history[-self.max_history_lines:]
+
+    def get_log_text(self) -> str:
+        return "\n".join(self.log_history)
     
     def pause_update(self):
         """Pause console updates to reduce CPU usage"""

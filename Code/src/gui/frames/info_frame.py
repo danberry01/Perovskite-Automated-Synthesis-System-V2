@@ -3,7 +3,11 @@ from ..components.constants import *
 import logging
 from time import sleep
 import os
+import shutil
+import socket
 import smtplib
+import subprocess
+import threading
 from email.message import EmailMessage
 from datetime import datetime
 from drivers.procedure_file_driver import ProcedureFile
@@ -15,6 +19,8 @@ from .procedure_viewer.console_frame import ConsoleFrame
 
 class InfoFrame(ctk.CTkFrame):
     """Frame to display miscellaneous information (contains console + status)."""
+    _NO_EMAIL_OPTION = "(no emails. Add to emails.yml)"
+
     def __init__(self, master, controller=None, **kwargs):
         super().__init__(master, corner_radius=0, fg_color=FOREGROUND_COLOR_TWO)
 
@@ -59,7 +65,9 @@ class InfoFrame(ctk.CTkFrame):
         # emails.yml is stored under Code/src/persistant/emails.yml
         self._emails_file = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', 'persistant', 'emails.yml'))
         self._smtp_config = {}
-        self._from_addr = 'pass@localhost'
+        self._from_addr = self._build_default_from_address()
+        self._email_send_thread = None
+        self._selected_email = None
         try:
             self._ensure_emails_file()
             self.emails = self._load_emails() or []
@@ -68,7 +76,7 @@ class InfoFrame(ctk.CTkFrame):
             self.emails = []
 
         # Option menu for selecting recipient
-        option_values = self.emails if len(self.emails) > 0 else ["(no emails. Add to emails.yml)"]
+        option_values = self.emails if len(self.emails) > 0 else [self._NO_EMAIL_OPTION]
         self.email_dropdown = ctk.CTkOptionMenu(
             master=self.status_frame,
             values=option_values,
@@ -80,6 +88,11 @@ class InfoFrame(ctk.CTkFrame):
             command=self._on_email_selected
         )
         self.email_dropdown.grid(row=5, column=0, sticky="ne", padx=5, pady=(6, 0))
+        if self.emails:
+            self._selected_email = self.emails[0]
+            self.email_dropdown.set(self._selected_email)
+        else:
+            self.email_dropdown.set(self._NO_EMAIL_OPTION)
 
         # Button to send the entire console log to the selected email
         self.email_button = ctk.CTkButton(master=self.status_frame, text="Email Console", command=self.send_console_email)
@@ -209,35 +222,42 @@ class InfoFrame(ctk.CTkFrame):
 
     def _ensure_emails_file(self):
         try:
-            # Use the same ProcedureFile helper used for locations.yml so
-            # parsing/formatting is consistent across the app.
+            os.makedirs(os.path.dirname(self._emails_file), exist_ok=True)
             pf = ProcedureFile()
-            data = pf.Open('persistant/emails.yml') or pf.Open('persistant/emails')
+            data = pf.Open(self._emails_file)
             if not data:
                 default = {
                     'smtp': {
+                        'transport': 'auto',
                         'host': 'localhost',
                         'port': 25,
                         'username': '',
                         'password': '',
-                        'use_tls': False
+                        'use_tls': False,
+                        'use_ssl': False,
+                        'timeout': 10,
+                        'sendmail_path': ''
                     },
-                    'from': 'pass@localhost',
+                    'from': self._build_default_from_address(),
                     'recipients': ['dcounte1@binghamton.edu']
                 }
-                pf.Save('persistant/emails', default)
+                pf.Save(self._emails_file, default)
         except Exception:
             logging.getLogger("Main Logger").exception("Failed to create emails.yml")
 
     def _load_emails(self):
         try:
             pf = ProcedureFile()
-            data = pf.Open('persistant/emails.yml') or pf.Open('persistant/emails')
-            if not data:
+            data = pf.Open(self._emails_file)
+            if not isinstance(data, dict):
                 return []
             self._smtp_config = data.get('smtp', {}) or {}
-            self._from_addr = data.get('from', self._smtp_config.get('username') or 'pass@localhost')
-            return data.get('recipients', []) or []
+            self._from_addr = str(data.get('from') or self._smtp_config.get('username') or self._build_default_from_address()).strip()
+
+            recipients = data.get('recipients', []) or []
+            if isinstance(recipients, str):
+                recipients = [recipients]
+            return [str(recipient).strip() for recipient in recipients if str(recipient).strip()]
         except Exception:
             logging.getLogger("Main Logger").exception("Failed to load emails.yml")
             return []
@@ -246,6 +266,10 @@ class InfoFrame(ctk.CTkFrame):
         self._selected_email = value
 
     def send_console_email(self):
+        if self._email_send_thread and self._email_send_thread.is_alive():
+            self._write_email_status("WARNING", "Email delivery already in progress.")
+            return
+
         try:
             recipient = getattr(self, '_selected_email', None)
             try:
@@ -253,36 +277,182 @@ class InfoFrame(ctk.CTkFrame):
                     recipient = self.email_dropdown.get()
             except Exception:
                 pass
-            if not recipient or recipient == "(no emails)":
-                self.console_frame.write_to_console(f"ERROR\t{datetime.now().isoformat()}: No recipient selected for email.")
+            if not recipient or recipient == self._NO_EMAIL_OPTION:
+                self._write_email_status("ERROR", "No recipient selected for email.")
                 return
-            try:
-                console_text = self.console_frame.console.get("1.0", "end")
-            except Exception:
-                console_text = ""
-            subject = f"PASS Console Log [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
-            msg = EmailMessage()
-            msg['Subject'] = subject
-            msg['From'] = getattr(self, '_from_addr', 'pass@localhost')
-            msg['To'] = recipient
-            msg.set_content(console_text)
-            smtp = getattr(self, '_smtp_config', {}) or {}
-            host = smtp.get('host', 'localhost')
-            port = smtp.get('port', 25)
-            username = smtp.get('username')
-            password = smtp.get('password')
-            use_tls = smtp.get('use_tls', False)
-            server = smtplib.SMTP(host, port, timeout=10)
-            if use_tls:
-                server.starttls()
-            if username and password:
-                server.login(username, password)
-            server.send_message(msg)
-            server.quit()
-            self.console_frame.write_to_console(f"INFO\t{datetime.now().isoformat()}: Sent console log to {recipient}")
+
+            console_text = self._get_console_log_text()
+            self._set_email_button_state(enabled=False, text="Sending...")
+            self._email_send_thread = threading.Thread(
+                target=self._send_console_email_worker,
+                args=(recipient, console_text),
+                daemon=True
+            )
+            self._email_send_thread.start()
         except Exception as e:
             logging.getLogger("Main Logger").exception("Failed to send console email: %s", e)
+            self._set_email_button_state(enabled=True, text="Email Console")
+            self._write_email_status("ERROR", f"Failed to queue email send: {e}")
+
+    def _build_default_from_address(self) -> str:
+        hostname = socket.gethostname().strip() or 'localhost'
+        return f"pass@{hostname}"
+
+    def _write_email_status(self, level: str, message: str):
+        try:
+            self.console_frame.write_to_console(f"{level}\t{datetime.now().isoformat()}: {message}")
+        except Exception:
+            pass
+
+    def _get_console_log_text(self) -> str:
+        try:
+            console_text = self.console_frame.get_log_text()
+        except Exception:
+            console_text = ""
+
+        if console_text.strip():
+            return console_text
+
+        try:
+            return self.console_frame.console.get("1.0", "end").strip()
+        except Exception:
+            return ""
+
+    def _set_email_button_state(self, enabled: bool, text: str):
+        try:
+            self.email_button.configure(state="normal" if enabled else "disabled", text=text)
+        except Exception:
+            pass
+
+    def _send_console_email_worker(self, recipient: str, console_text: str):
+        try:
+            message = self._build_console_email_message(recipient, console_text)
+            self._deliver_email_message(message)
+            self.after(0, lambda: self._write_email_status("INFO", f"Sent console log to {recipient}"))
+        except Exception as e:
+            logging.getLogger("Main Logger").exception("Failed to send console email: %s", e)
+            self.after(0, lambda: self._write_email_status("ERROR", f"Failed to send email: {e}"))
+        finally:
+            self.after(0, lambda: self._set_email_button_state(enabled=True, text="Email Console"))
+
+    def _build_console_email_message(self, recipient: str, console_text: str) -> EmailMessage:
+        timestamp = datetime.now()
+        hostname = socket.gethostname().strip() or 'localhost'
+        subject = f"PASS Console Log [{hostname}] [{timestamp.strftime('%Y-%m-%d %H:%M:%S')}]"
+        body = console_text.strip() or "Console log was empty at send time."
+
+        message = EmailMessage()
+        message['Subject'] = subject
+        message['From'] = getattr(self, '_from_addr', self._build_default_from_address())
+        message['To'] = recipient
+        message.set_content(body)
+        message.add_attachment(
+            body.encode('utf-8'),
+            maintype='text',
+            subtype='plain',
+            filename=f"pass-console-{timestamp.strftime('%Y%m%d-%H%M%S')}.log"
+        )
+        return message
+
+    def _deliver_email_message(self, message: EmailMessage):
+        smtp = getattr(self, '_smtp_config', {}) or {}
+        transport = str(smtp.get('transport', 'auto')).strip().lower() or 'auto'
+        if transport not in ('auto', 'smtp', 'sendmail'):
+            transport = 'auto'
+
+        smtp_error = None
+        if transport in ('auto', 'smtp'):
             try:
-                self.console_frame.write_to_console(f"ERROR\t{datetime.now().isoformat()}: Failed to send email: {e}")
-            except Exception:
-                pass
+                self._send_via_smtp(message, smtp)
+                return
+            except Exception as exc:
+                smtp_error = exc
+                if transport == 'smtp':
+                    raise
+
+        if transport in ('auto', 'sendmail'):
+            try:
+                self._send_via_sendmail(message, smtp)
+                return
+            except Exception as exc:
+                if smtp_error is not None:
+                    raise RuntimeError(f"SMTP delivery failed: {smtp_error}; sendmail fallback failed: {exc}") from exc
+                raise
+
+        if smtp_error is not None:
+            raise smtp_error
+
+    def _send_via_smtp(self, message: EmailMessage, smtp_config: dict):
+        host = str(smtp_config.get('host') or 'localhost').strip()
+        port = self._coerce_int(smtp_config.get('port'), 25)
+        timeout = self._coerce_float(smtp_config.get('timeout'), 10.0)
+        username = str(smtp_config.get('username') or '').strip()
+        password = str(smtp_config.get('password') or '')
+        use_tls = self._coerce_bool(smtp_config.get('use_tls'), False)
+        use_ssl = self._coerce_bool(smtp_config.get('use_ssl'), False)
+        local_hostname = str(smtp_config.get('local_hostname') or '').strip() or None
+
+        smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+        with smtp_class(host, port, timeout=timeout, local_hostname=local_hostname) as server:
+            server.ehlo()
+            if use_tls and not use_ssl:
+                server.starttls()
+                server.ehlo()
+            if username:
+                server.login(username, password)
+            server.send_message(message)
+
+    def _send_via_sendmail(self, message: EmailMessage, smtp_config: dict):
+        sendmail_path = self._resolve_sendmail_path(smtp_config)
+        if sendmail_path is None:
+            raise FileNotFoundError("No sendmail binary found. Configure SMTP or install sendmail/postfix.")
+
+        timeout = self._coerce_float(smtp_config.get('timeout'), 10.0)
+        result = subprocess.run(
+            [sendmail_path, '-t', '-oi'],
+            input=message.as_bytes(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+            check=False
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode('utf-8', errors='replace').strip()
+            raise RuntimeError(stderr or f"sendmail exited with code {result.returncode}")
+
+    def _resolve_sendmail_path(self, smtp_config: dict):
+        configured_path = str(smtp_config.get('sendmail_path') or '').strip()
+        candidates = [configured_path] if configured_path else []
+        candidates.extend([
+            shutil.which('sendmail'),
+            '/usr/sbin/sendmail',
+            '/usr/bin/sendmail'
+        ])
+
+        for path in candidates:
+            if path and os.path.isfile(path) and os.access(path, os.X_OK):
+                return path
+        return None
+
+    def _coerce_bool(self, value, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in ('1', 'true', 'yes', 'on'):
+                return True
+            if normalized in ('0', 'false', 'no', 'off'):
+                return False
+        return default
+
+    def _coerce_int(self, value, default: int) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return default
+
+    def _coerce_float(self, value, default: float) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return default
