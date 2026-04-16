@@ -379,6 +379,7 @@ class MoveRegistry():
         tolerance_mm = 1.0
         max_iterations = 50
         max_step_mm = 0.5
+        worsening_margin_mm = 0.25
 
         # Basic checks
         if not getattr(self, 'camera', None) or not self.camera.is_connected():
@@ -463,33 +464,36 @@ class MoveRegistry():
             return
 
         saved_entry = saved[matched_id]
-        saved_abs = saved_entry.get('abs_aruco_position') or saved_entry.get('absolute_position')
-        if not saved_abs:
-            self.logger.warning(f"aruco_home: saved calibration for {matched_id} missing absolute position")
+        saved_rel = saved_entry.get('verification_average')
+        if not saved_rel:
+            relative_positions = saved_entry.get('relative_positions') or []
+            if relative_positions:
+                saved_rel = relative_positions[0]
+        if not saved_rel:
+            self.logger.warning(f"aruco_home: saved calibration for {matched_id} missing relative marker pose")
             return
-
-        # snapshot gantry positions (do not update this during iterative checks)
-        initial_gantry = self.control_board.positions.copy()
 
         # compute initial averaged relative marker position
         rel = detected[matched_id]
+        axis_polarity = {'x': 1.0, 'y': 1.0, 'z': 1.0}
 
-        def rel_to_abs(rel_pos, gantry_ref):
+        def relative_error_mm(current_rel):
             return {
-                'x': gantry_ref['X'] + rel_pos['x'] * 1000.0,
-                'y': gantry_ref['Y'] + rel_pos['y'] * 1000.0,
-                'z': gantry_ref['Z'] + rel_pos['z'] * 1000.0,
+                'x': (float(saved_rel['x']) - float(current_rel['x'])) * 1000.0,
+                'y': (float(saved_rel['y']) - float(current_rel['y'])) * 1000.0,
+                'z': (float(saved_rel['z']) - float(current_rel['z'])) * 1000.0,
             }
+
+        err = relative_error_mm(rel)
 
         # iterative alignment loop
         iteration = 0
         while iteration < max_iterations:
             iteration += 1
 
-            test_abs = rel_to_abs(rel, initial_gantry)
-            err_x = test_abs['x'] - saved_abs['x']
-            err_y = test_abs['y'] - saved_abs['y']
-            err_z = test_abs['z'] - saved_abs['z']
+            err_x = err['x']
+            err_y = err['y']
+            err_z = err['z']
 
             self.logger.info(f"aruco_home: Iter {iteration} Marker {matched_id} err(mm) x={err_x:.3f} y={err_y:.3f} z={err_z:.3f}")
 
@@ -498,10 +502,11 @@ class MoveRegistry():
                 self.logger.info("aruco_home: marker aligned within tolerance")
                 return
 
-            # Compute step (move camera by delta = test_abs - saved_abs, clipped)
-            step_x = max(-max_step_mm, min(max_step_mm, err_x))
-            step_y = max(-max_step_mm, min(max_step_mm, err_y))
-            step_z = max(-max_step_mm, min(max_step_mm, err_z))
+            # Compute step in camera-relative marker space. Axis polarity flips
+            # automatically if a move makes that axis worse on the next scan.
+            step_x = axis_polarity['x'] * max(-max_step_mm, min(max_step_mm, err_x))
+            step_y = axis_polarity['y'] * max(-max_step_mm, min(max_step_mm, err_y))
+            step_z = axis_polarity['z'] * max(-max_step_mm, min(max_step_mm, err_z))
 
             # If steps are negligibly small but still outside tolerance, break
             if abs(step_x) < 0.001 and abs(step_y) < 0.001 and abs(step_z) < 0.001:
@@ -515,6 +520,8 @@ class MoveRegistry():
                 self.move_toolhead(step_x, step_y, step_z, 1)
             except Exception as e:
                 self.logger.exception(f"aruco_home: failed to perform relative move: {e}")
+                if self.control_board and hasattr(self.control_board, 'is_killed') and self.control_board.is_killed():
+                    raise
                 return
 
             # allow motion settle
@@ -525,6 +532,18 @@ class MoveRegistry():
             if not rel:
                 self.logger.warning("aruco_home: marker lost after move, aborting")
                 return
+
+            new_err = relative_error_mm(rel)
+            for axis_name, step_value in (('x', step_x), ('y', step_y), ('z', step_z)):
+                if abs(step_value) < worsening_margin_mm:
+                    continue
+                if abs(new_err[axis_name]) > abs(err[axis_name]) + worsening_margin_mm:
+                    axis_polarity[axis_name] *= -1.0
+                    self.logger.info(
+                        f"aruco_home: flipped {axis_name.upper()} correction polarity after error worsened "
+                        f"from {err[axis_name]:.3f}mm to {new_err[axis_name]:.3f}mm"
+                    )
+            err = new_err
 
         self.logger.warning("aruco_home: max iterations reached without alignment")
         

@@ -73,6 +73,25 @@ class Toolhead():
             except Exception:
                 return False
 
+        start_positions = {
+            "X": self.get_position("X"),
+            "Y": self.get_position("Y"),
+            "Z": self.get_position("Z"),
+        }
+
+        def _expected_position(axis: str, target):
+            if target is None:
+                return None
+            if not relative:
+                return target
+            start_value = start_positions.get(axis)
+            if start_value is None:
+                return None
+            try:
+                return float(start_value) + float(target)
+            except Exception:
+                return None
+
         # First attempt coordinated move if requested
         if coordinated:
             try:
@@ -96,14 +115,18 @@ class Toolhead():
 
                 # Verify positions; if any axis didn't reach target, fall back
                 need_fallback = False
-                if z is not None and not _position_close(self.get_position("Z"), z):
-                    logger.warning(f"Coordinated move: Z did not reach {z}, actual={self.get_position('Z')} -> falling back")
+                expected_z = _expected_position("Z", z)
+                expected_x = _expected_position("X", x)
+                expected_y = _expected_position("Y", y)
+
+                if expected_z is not None and not _position_close(self.get_position("Z"), expected_z):
+                    logger.warning(f"Coordinated move: Z did not reach {expected_z}, actual={self.get_position('Z')} -> falling back")
                     need_fallback = True
-                if x is not None and not _position_close(self.get_position("X"), x):
-                    logger.warning(f"Coordinated move: X did not reach {x}, actual={self.get_position('X')} -> falling back")
+                if expected_x is not None and not _position_close(self.get_position("X"), expected_x):
+                    logger.warning(f"Coordinated move: X did not reach {expected_x}, actual={self.get_position('X')} -> falling back")
                     need_fallback = True
-                if y is not None and not _position_close(self.get_position("Y"), y):
-                    logger.warning(f"Coordinated move: Y did not reach {y}, actual={self.get_position('Y')} -> falling back")
+                if expected_y is not None and not _position_close(self.get_position("Y"), expected_y):
+                    logger.warning(f"Coordinated move: Y did not reach {expected_y}, actual={self.get_position('Y')} -> falling back")
                     need_fallback = True
 
                 if need_fallback:
