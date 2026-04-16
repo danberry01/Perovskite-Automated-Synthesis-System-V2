@@ -24,6 +24,17 @@ from services.image_processing import ImageProcessor
 from services.data_processor import plot_spectra, save_all_to_csv
 from drivers.a_star_driver import AStarPlanner
 
+
+def _get_aruco_calibration_file_path() -> str:
+    return os.path.normpath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "calibration_data",
+            "aruco_calibrations.json",
+        )
+    )
+
 class MoveRegistry():
     
 
@@ -362,7 +373,7 @@ class MoveRegistry():
         """Verify gantry using saved ArUco calibrations and move to set location
         """
         # Config
-        calibration_file = "calibration_data/aruco_calibrations.json"
+        calibration_file = _get_aruco_calibration_file_path()
         scan_timeout_s = 2.0
         rescan_timeout_s = 1.0
         tolerance_mm = 1.0
@@ -392,6 +403,10 @@ class MoveRegistry():
                     self.logger.warning("Calibration file is empty")
                     return
                 saved = json.loads(content)
+                if not isinstance(saved, dict):
+                    self.logger.warning("aruco_home: calibration file is not a JSON object")
+                    return
+                saved = {int(marker_id): data for marker_id, data in saved.items()}
         except Exception as e:
             self.logger.exception(f"aruco_home: failed to load calibration file: {e}")
             return

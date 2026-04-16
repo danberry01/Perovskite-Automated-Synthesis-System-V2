@@ -12,6 +12,19 @@ from drivers.controlboard_driver import ControlBoard
 from .aruco_calibration_layout import ArucoCalibrationLayout
 
 
+def _get_aruco_calibration_file_path() -> str:
+    return os.path.normpath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "..",
+            "calibration_data",
+            "aruco_calibrations.json",
+        )
+    )
+
+
 class CalibrationAborted(RuntimeError):
     """Raised when calibration is cancelled or interrupted by emergency stop."""
 
@@ -54,7 +67,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         # Calibration data storage
         self.calibration_data: Dict[int, Dict] = {}  # saved/permanent calibrations
         self.pending_calibrations: Dict[int, Dict] = {}  # newly scanned calibrations not yet saved
-        self.calibration_file = "calibration_data/aruco_calibrations.json"
+        self.calibration_file = _get_aruco_calibration_file_path()
 
         # State tracking
         self._is_paused = False
