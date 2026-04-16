@@ -431,6 +431,10 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         )
         return any(marker in normalized for marker in error_markers)
 
+    @staticmethod
+    def _is_paused_for_user_line(line: str) -> bool:
+        return "busy: paused for user" in line.strip().lower()
+
     def _record_move_error(self, line: str):
         try:
             self.control_board._last_move_error_line = line.strip()
@@ -483,6 +487,13 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         # Accept lines that start with 'ok' (firmware may append extra text).
         if line.lower().startswith("ok"):
             self.control_board.received_ok.set()
+            return
+
+        # In unattended automation this state never resolves on its own, so
+        # treat it as a move-level failure instead of waiting for timeout.
+        if self._is_paused_for_user_line(line):
+            self.logger.error(f"Firmware paused for user: {line}")
+            self._record_move_error(line)
             return
 
         # Fallback: log other informational lines. Treat echoed firmware

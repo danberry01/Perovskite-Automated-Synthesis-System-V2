@@ -282,6 +282,12 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         attempts += 1
                         self._call_ui(self._update_status, f"Attempt {attempts}: Homing and verifying Marker {marker_id}...")
 
+                        if attempts > 1:
+                            try:
+                                self._prepare_for_rehome()
+                            except Exception as e:
+                                self.logger.warning(f"Failed to raise Z before re-homing on attempt {attempts} for Marker {marker_id}: {e}")
+
                         # Home the gantry (use toolhead if available for safer homing)
                         try:
                             if hasattr(self.dispatcher, 'toolhead') and self.dispatcher.toolhead is not None:
@@ -417,6 +423,32 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             self._call_ui(self._update_status, f"Error: {e}")
         finally:
             self._call_ui(self._reset_calibration)
+
+    def _prepare_for_rehome(self):
+        """Lift Z clear of the probe trigger area before repeating a home cycle."""
+        toolhead = getattr(self.dispatcher, 'toolhead', None)
+        if toolhead is None:
+            return
+
+        try:
+            current_z = self.control_board.get_position("Z")
+        except Exception:
+            current_z = None
+
+        if current_z is None:
+            return
+
+        current_z = float(current_z)
+        safe_floor_z_mm = 40.0
+        extra_lift_mm = 15.0
+        max_safe_z_mm = 200.0
+        target_z = min(max_safe_z_mm, max(safe_floor_z_mm, current_z + extra_lift_mm))
+
+        if target_z <= current_z + 0.5:
+            return
+
+        self.logger.debug(f"Raising Z from {current_z:.2f} to {target_z:.2f} before repeated homing")
+        toolhead.move_to(z=target_z, relative=False, feedrate=600, coordinated=False)
     
     def _home_gantry(self):
         """Home the gantry to origin without blocking the UI thread."""
