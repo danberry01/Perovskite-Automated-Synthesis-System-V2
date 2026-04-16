@@ -381,8 +381,14 @@ class MoveRegistry():
         stable_rescan_attempts = 3
         min_detections_per_marker = 4
         span_threshold_m = 0.012
-        tolerance_mm = 2.0
-        max_iterations = 60
+        tolerance_mm = 4.0
+        max_iterations = 25
+        jacobian_probe_mm = 1.0
+        jacobian_rescan_timeout_s = 1.0
+        jacobian_rescan_attempts = 2
+        jacobian_refresh_interval = 3
+        max_xy_step_mm = 4.0
+        max_z_step_mm = 2.0
 
         # Basic checks
         if not getattr(self, 'camera', None) or not self.camera.is_connected():
@@ -543,30 +549,99 @@ class MoveRegistry():
             self.logger.warning(f"aruco_home: saved calibration for {matched_id} missing relative marker pose")
             return
 
-        # compute initial averaged relative marker position
-        rel = detected[matched_id]
+        def rel_to_mm_vector(rel_pos: dict) -> np.ndarray:
+            return np.array([
+                float(rel_pos['x']) * 1000.0,
+                float(rel_pos['y']) * 1000.0,
+                float(rel_pos['z']) * 1000.0,
+            ], dtype=float)
 
-        def relative_correction_mm(current_rel):
-            # Marker absolute position is modeled as:
-            #   marker_abs = gantry_pos + marker_relative_to_camera
-            # so the gantry delta required to return to the saved camera pose is:
-            #   delta_gantry = current_rel - saved_rel
+        def vector_to_rel_dict(vector: np.ndarray) -> dict:
             return {
-                'x': (float(current_rel['x']) - float(saved_rel['x'])) * 1000.0,
-                'y': (float(current_rel['y']) - float(saved_rel['y'])) * 1000.0,
-                'z': (float(current_rel['z']) - float(saved_rel['z'])) * 1000.0,
+                'x': float(vector[0]) / 1000.0,
+                'y': float(vector[1]) / 1000.0,
+                'z': float(vector[2]) / 1000.0,
             }
 
-        err = relative_correction_mm(rel)
+        def scan_for_stable_marker_vector(marker_id: int, timeout_s: float, attempts: int, warmup_s: float):
+            rel_pos, stats = scan_for_stable_marker(marker_id, timeout_s, attempts, warmup_s)
+            if rel_pos is None:
+                return None, stats
+            return rel_to_mm_vector(rel_pos), stats
+
+        def estimate_local_jacobian(current_rel_mm: np.ndarray):
+            axis_moves = (
+                ('X', np.array([jacobian_probe_mm, 0.0, 0.0], dtype=float)),
+                ('Y', np.array([0.0, jacobian_probe_mm, 0.0], dtype=float)),
+                ('Z', np.array([0.0, 0.0, jacobian_probe_mm], dtype=float)),
+            )
+            jacobian = np.zeros((3, 3), dtype=float)
+
+            for column_index, (axis_name, probe_vector) in enumerate(axis_moves):
+                try:
+                    self.logger.debug(f"aruco_home: probing local Jacobian with +{jacobian_probe_mm:.2f}mm on {axis_name}")
+                    self.move_toolhead(float(probe_vector[0]), float(probe_vector[1]), float(probe_vector[2]), 1)
+                except Exception as e:
+                    self.logger.exception(f"aruco_home: failed to probe {axis_name} axis for Jacobian: {e}")
+                    if self.control_board and hasattr(self.control_board, 'is_killed') and self.control_board.is_killed():
+                        raise
+                    return None, None
+
+                sleep(post_move_settle_s)
+                probe_rel_mm, _ = scan_for_stable_marker_vector(
+                    matched_id,
+                    timeout_s=jacobian_rescan_timeout_s,
+                    attempts=jacobian_rescan_attempts,
+                    warmup_s=scan_warmup_s,
+                )
+
+                try:
+                    self.move_toolhead(float(-probe_vector[0]), float(-probe_vector[1]), float(-probe_vector[2]), 1)
+                except Exception as e:
+                    self.logger.exception(f"aruco_home: failed to return from {axis_name} Jacobian probe: {e}")
+                    if self.control_board and hasattr(self.control_board, 'is_killed') and self.control_board.is_killed():
+                        raise
+                    return None, None
+
+                sleep(post_move_settle_s)
+
+                if probe_rel_mm is None:
+                    self.logger.warning(f"aruco_home: marker unstable during {axis_name} Jacobian probe")
+                    return None, None
+
+                jacobian[:, column_index] = (probe_rel_mm - current_rel_mm) / jacobian_probe_mm
+
+            centered_rel_mm, _ = scan_for_stable_marker_vector(
+                matched_id,
+                timeout_s=jacobian_rescan_timeout_s,
+                attempts=jacobian_rescan_attempts,
+                warmup_s=scan_warmup_s,
+            )
+            if centered_rel_mm is None:
+                self.logger.warning("aruco_home: marker unstable after Jacobian probe return")
+                return None, None
+
+            rank = int(np.linalg.matrix_rank(jacobian))
+            if rank < 3:
+                self.logger.warning(f"aruco_home: local Jacobian is rank-deficient (rank={rank})")
+                return None, None
+
+            self.logger.debug(f"aruco_home: local Jacobian(mm_rel/mm_gantry) = {jacobian.tolist()}")
+            return jacobian, centered_rel_mm
+
+        target_rel_mm = rel_to_mm_vector(saved_rel)
+        current_rel_mm = rel_to_mm_vector(detected[matched_id])
+        jacobian = None
 
         # iterative alignment loop
         iteration = 0
         while iteration < max_iterations:
             iteration += 1
 
-            err_x = err['x']
-            err_y = err['y']
-            err_z = err['z']
+            desired_rel_change_mm = target_rel_mm - current_rel_mm
+            err_x = float(desired_rel_change_mm[0])
+            err_y = float(desired_rel_change_mm[1])
+            err_z = float(desired_rel_change_mm[2])
 
             self.logger.info(f"aruco_home: Iter {iteration} Marker {matched_id} err(mm) x={err_x:.3f} y={err_y:.3f} z={err_z:.3f}")
 
@@ -575,10 +650,37 @@ class MoveRegistry():
                 self.logger.info("aruco_home: marker aligned within tolerance")
                 return
 
-            # Compute the gantry correction step directly from the relative pose delta.
-            step_x = compute_step_mm(err_x)
-            step_y = compute_step_mm(err_y)
-            step_z = compute_step_mm(err_z)
+            if jacobian is None or iteration == 1 or ((iteration - 1) % jacobian_refresh_interval == 0):
+                jacobian, current_rel_mm = estimate_local_jacobian(current_rel_mm)
+                if jacobian is None or current_rel_mm is None:
+                    self.logger.warning("aruco_home: failed to estimate local camera-to-gantry Jacobian")
+                    return
+                desired_rel_change_mm = target_rel_mm - current_rel_mm
+                err_x = float(desired_rel_change_mm[0])
+                err_y = float(desired_rel_change_mm[1])
+                err_z = float(desired_rel_change_mm[2])
+                self.logger.info(
+                    f"aruco_home: refreshed Jacobian; err(mm) x={err_x:.3f} y={err_y:.3f} z={err_z:.3f}"
+                )
+
+                if abs(err_x) <= tolerance_mm and abs(err_y) <= tolerance_mm and abs(err_z) <= tolerance_mm:
+                    self.logger.info("aruco_home: marker aligned within tolerance")
+                    return
+
+            try:
+                gantry_step_mm, _, _, _ = np.linalg.lstsq(jacobian, desired_rel_change_mm, rcond=None)
+            except Exception as e:
+                self.logger.exception(f"aruco_home: failed to solve Jacobian correction: {e}")
+                return
+
+            gantry_step_mm = np.asarray(gantry_step_mm, dtype=float)
+            gantry_step_mm[0] = np.clip(gantry_step_mm[0], -max_xy_step_mm, max_xy_step_mm)
+            gantry_step_mm[1] = np.clip(gantry_step_mm[1], -max_xy_step_mm, max_xy_step_mm)
+            gantry_step_mm[2] = np.clip(gantry_step_mm[2], -max_z_step_mm, max_z_step_mm)
+
+            step_x = float(gantry_step_mm[0])
+            step_y = float(gantry_step_mm[1])
+            step_z = float(gantry_step_mm[2])
 
             # If steps are negligibly small but still outside tolerance, break
             if abs(step_x) < 0.001 and abs(step_y) < 0.001 and abs(step_z) < 0.001:
@@ -610,7 +712,7 @@ class MoveRegistry():
                 self.logger.warning("aruco_home: marker remained unstable after move, aborting")
                 return
 
-            err = relative_correction_mm(rel)
+            current_rel_mm = rel_to_mm_vector(rel)
 
         self.logger.warning("aruco_home: max iterations reached without alignment")
         
