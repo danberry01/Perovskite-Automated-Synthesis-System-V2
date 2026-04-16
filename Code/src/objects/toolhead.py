@@ -8,6 +8,30 @@ from drivers.controlboard_driver import ControlBoard
 class Toolhead():
     def __init__(self, control_board: ControlBoard):
         self.control_board = control_board
+
+    def _ensure_connected(self):
+        if not self.control_board.is_connected():
+            raise RuntimeError("Control board is not connected")
+
+    def home_axes(self, *axes: str):
+        logger = self.control_board.logger
+        self._ensure_connected()
+
+        for axis in axes:
+            try:
+                self.control_board.send_message(f"G28 {axis}", require_lock=True)
+                self.control_board.finish_moves()
+                try:
+                    self.control_board.request_position()
+                except Exception:
+                    pass
+                logger.info(f"Homed {axis}; position {axis}={self.get_position(axis)}")
+            except Exception as exc:
+                logger.exception(f"Homing {axis} failed")
+                raise RuntimeError(f"Failed to home {axis} axis") from exc
+
+    def home_xy(self):
+        self.home_axes("Y", "X")
         
     def move_axis(self, axis: str, distance_mm: float, feedrate_mm_per_minute: int = 1000, relative: bool = False, finish_move: bool = True):
         """Move a single axis through the control board.
@@ -28,26 +52,7 @@ class Toolhead():
         # Home each axis separately and stop immediately on the first failure.
         # This board is more reliable with per-axis G28 commands than a
         # combined homing command.
-        logger = self.control_board.logger
-
-        if not self.control_board.is_connected():
-            raise RuntimeError("Control board is not connected")
-
-        def _home_axis(axis: str):
-            self.control_board.send_message(f"G28 {axis}", require_lock=True)
-            self.control_board.finish_moves()
-            try:
-                self.control_board.request_position()
-            except Exception:
-                pass
-            logger.info(f"Homed {axis}; position {axis}={self.get_position(axis)}")
-
-        for axis in ("Z", "Y", "X"):
-            try:
-                _home_axis(axis)
-            except Exception as exc:
-                logger.exception(f"Homing {axis} failed")
-                raise RuntimeError(f"Failed to home {axis} axis") from exc
+        self.home_axes("Z", "Y", "X")
 
     def move_to(self, x: float = None, y: float = None, z: float = None, relative: bool = False, feedrate: int = 1000, coordinated: bool = True):
         """Move multiple axes.

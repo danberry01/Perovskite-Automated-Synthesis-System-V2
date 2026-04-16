@@ -258,7 +258,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     continue
 
                 # Record the gantry position(s) where each marker was observed
-                recorded_gantry_positions = {mid: self.control_board.positions.copy() for mid in marker_positions.keys()}
+                recorded_gantry = self._get_gantry_position_snapshot(refresh=True)
+                recorded_gantry_positions = {mid: recorded_gantry.copy() for mid in marker_positions.keys()}
 
                 self._call_ui(self._update_status, "Verifying calibration...")
 
@@ -282,16 +283,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         attempts += 1
                         self._call_ui(self._update_status, f"Attempt {attempts}: Homing and verifying Marker {marker_id}...")
 
-                        if attempts > 1:
-                            try:
-                                self._prepare_for_rehome()
-                            except Exception as e:
-                                self.logger.warning(f"Failed to raise Z before re-homing on attempt {attempts} for Marker {marker_id}: {e}")
-
-                        # Home the gantry (use toolhead if available for safer homing)
                         try:
-                            if hasattr(self.dispatcher, 'toolhead') and self.dispatcher.toolhead is not None:
-                                self.dispatcher.toolhead.home()
+                            self._home_for_verification_attempt(attempts)
                         except Exception as e:
                             self.logger.exception(f"Failed to home gantry on attempt {attempts} for Marker {marker_id}: {e}")
                             time.sleep(0.3)
@@ -302,12 +295,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                         try:
                             target = recorded_gantry
                             self.logger.debug(f"Moving to recorded gantry pos for Marker {marker_id}: {target}")
-                            if hasattr(self.dispatcher, 'toolhead') and self.dispatcher.toolhead is not None:
-                                self.dispatcher.toolhead.move_to(x=target['X'], y=target['Y'], z=target['Z'], relative=False, feedrate=2000, coordinated=True)
-                            else:
-                                self.control_board.move_axis('Z', target['Z'], feedrate_mm_per_minute=600)
-                                self.control_board.move_axis('X', target['X'], feedrate_mm_per_minute=2000)
-                                self.control_board.move_axis('Y', target['Y'], feedrate_mm_per_minute=2000)
+                            self._move_to_gantry_reference(target)
                             # Request position update to refresh `self.control_board.positions`
                             try:
                                 self.control_board.request_position()
@@ -423,6 +411,65 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             self._call_ui(self._update_status, f"Error: {e}")
         finally:
             self._call_ui(self._reset_calibration)
+
+    def _get_gantry_position_snapshot(self, refresh: bool = True):
+        if refresh:
+            try:
+                self.control_board.request_position()
+            except Exception:
+                pass
+            import time
+            time.sleep(0.2)
+        return self.control_board.positions.copy()
+
+    def _home_for_verification_attempt(self, attempt_number: int):
+        toolhead = getattr(self.dispatcher, 'toolhead', None)
+        if toolhead is None:
+            raise RuntimeError("Toolhead not available for calibration homing")
+
+        if attempt_number <= 1:
+            toolhead.home()
+            return
+
+        self._prepare_for_rehome()
+        toolhead.home_xy()
+
+    def _move_to_gantry_reference(self, target):
+        toolhead = getattr(self.dispatcher, 'toolhead', None)
+        if toolhead is None:
+            raise RuntimeError("Toolhead not available for calibration move")
+
+        current_z = self.control_board.get_position("Z")
+        current_z = float(target['Z'] if current_z is None else current_z)
+        target_z = float(target['Z'])
+        travel_z = min(200.0, max(current_z, target_z, 40.0))
+
+        def _run_move(move_callable, description: str):
+            try:
+                move_callable()
+            except Exception as exc:
+                if "paused for user" not in str(exc).lower():
+                    raise
+                self.logger.warning(f"Calibration move hit firmware pause during {description}; sending M108 and retrying once")
+                self.control_board.resume_from_user_pause()
+                move_callable()
+
+        if travel_z > current_z + 0.5:
+            _run_move(
+                lambda: toolhead.move_to(z=travel_z, relative=False, feedrate=600, coordinated=False),
+                "travel Z raise"
+            )
+
+        _run_move(
+            lambda: toolhead.move_to(x=target['X'], y=target['Y'], relative=False, feedrate=2000, coordinated=False),
+            "XY return move"
+        )
+
+        if abs(target_z - travel_z) > 0.5:
+            _run_move(
+                lambda: toolhead.move_to(z=target_z, relative=False, feedrate=600, coordinated=False),
+                "final Z settle"
+            )
 
     def _prepare_for_rehome(self):
         """Lift Z clear of the probe trigger area before repeating a home cycle."""

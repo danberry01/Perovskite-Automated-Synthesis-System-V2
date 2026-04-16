@@ -214,6 +214,24 @@ class ControlBoard():
                     self.logger.exception(f"Failed to send firmware reset commands: {e}")
         except Exception:
             self.logger.exception("Failed to clear control board kill state")
+
+    def resume_from_user_pause(self):
+        """Clear Marlin's wait-for-user state for unattended automation."""
+        if not self.is_connected():
+            raise RuntimeError("Control board is not connected")
+
+        self.logger.warning("Sending M108 to clear firmware wait-for-user state")
+        try:
+            self._move_error.clear()
+        except Exception:
+            pass
+        self._last_move_error_line = None
+        self.send_message("M108", require_lock=True)
+        sleep(0.2)
+        try:
+            self.request_position()
+        except Exception:
+            pass
         
     def _begin_reader_thread(self):
         self.reader_thread = serial.threaded.ReaderThread(
