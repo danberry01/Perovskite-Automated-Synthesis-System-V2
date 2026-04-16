@@ -39,6 +39,7 @@ class ControlBoard():
         self._raw_log_handle = None
         # Event to indicate a move-level error (e.g. homing failed)
         self._move_error = threading.Event()
+        self._last_move_error_line = None
 
     def connect(self):
         """Connect to the control board and start the reader thread."""
@@ -332,6 +333,7 @@ class ControlBoard():
             self._move_error.clear()
         except Exception:
             pass
+        self._last_move_error_line = None
         sleep(0.1)
         try:
             self.send_message("M400", require_lock=True)
@@ -377,6 +379,9 @@ class ControlBoard():
         # If we exited because of a firmware-reported move error, raise so
         # callers (e.g. procedure runner) can abort and handle it.
         if getattr(self, '_move_error', None) is not None and self._move_error.is_set():
+            error_line = (self._last_move_error_line or "").strip()
+            if error_line:
+                raise RuntimeError(f"Firmware reported a move error: {error_line}")
             raise RuntimeError("Firmware reported a move error (see logs)")
         if not completed:
             self.logger.error(f"Timed out waiting for move completion after {timeout:.1f}s")
@@ -408,18 +413,30 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         if normalized.startswith("error"):
             return True
 
+        informational_markers = (
+            "endstop hit",
+            "endstops hit",
+        )
+        if any(marker in normalized for marker in informational_markers):
+            return False
+
         error_markers = (
             "homing failed",
             "home xyz first",
             "must home",
-            "endstop hit",
-            "endstops hit",
             "printer halted",
             "kill() called",
             "probe failed",
             "unknown message",
         )
         return any(marker in normalized for marker in error_markers)
+
+    def _record_move_error(self, line: str):
+        try:
+            self.control_board._last_move_error_line = line.strip()
+            self.control_board._move_error.set()
+        except Exception:
+            pass
 
     def handle_line(self, line):
         """Process each received line."""
@@ -457,7 +474,7 @@ class ControlBoardLineReader(serial.threaded.LineReader):
             # and record a move-level error so waiting loops can abort.
             try:
                 if self._is_move_error_line(line):
-                    self.control_board._move_error.set()
+                    self._record_move_error(line)
             except Exception:
                 pass
             return
@@ -476,7 +493,7 @@ class ControlBoardLineReader(serial.threaded.LineReader):
             self.logger.warning(f"Firmware: {line}")
             try:
                 if self._is_move_error_line(line):
-                    self.control_board._move_error.set()
+                    self._record_move_error(line)
             except Exception:
                 pass
         else:
