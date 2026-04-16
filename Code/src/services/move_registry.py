@@ -383,7 +383,6 @@ class MoveRegistry():
         span_threshold_m = 0.012
         tolerance_mm = 2.0
         max_iterations = 60
-        worsening_margin_mm = 2.0
 
         # Basic checks
         if not getattr(self, 'camera', None) or not self.camera.is_connected():
@@ -546,16 +545,19 @@ class MoveRegistry():
 
         # compute initial averaged relative marker position
         rel = detected[matched_id]
-        axis_polarity = {'x': 1.0, 'y': 1.0, 'z': 1.0}
 
-        def relative_error_mm(current_rel):
+        def relative_correction_mm(current_rel):
+            # Marker absolute position is modeled as:
+            #   marker_abs = gantry_pos + marker_relative_to_camera
+            # so the gantry delta required to return to the saved camera pose is:
+            #   delta_gantry = current_rel - saved_rel
             return {
-                'x': (float(saved_rel['x']) - float(current_rel['x'])) * 1000.0,
-                'y': (float(saved_rel['y']) - float(current_rel['y'])) * 1000.0,
-                'z': (float(saved_rel['z']) - float(current_rel['z'])) * 1000.0,
+                'x': (float(current_rel['x']) - float(saved_rel['x'])) * 1000.0,
+                'y': (float(current_rel['y']) - float(saved_rel['y'])) * 1000.0,
+                'z': (float(current_rel['z']) - float(saved_rel['z'])) * 1000.0,
             }
 
-        err = relative_error_mm(rel)
+        err = relative_correction_mm(rel)
 
         # iterative alignment loop
         iteration = 0
@@ -573,11 +575,10 @@ class MoveRegistry():
                 self.logger.info("aruco_home: marker aligned within tolerance")
                 return
 
-            # Compute step in camera-relative marker space. Axis polarity flips
-            # automatically if a move makes that axis worse on the next scan.
-            step_x = axis_polarity['x'] * compute_step_mm(err_x)
-            step_y = axis_polarity['y'] * compute_step_mm(err_y)
-            step_z = axis_polarity['z'] * compute_step_mm(err_z)
+            # Compute the gantry correction step directly from the relative pose delta.
+            step_x = compute_step_mm(err_x)
+            step_y = compute_step_mm(err_y)
+            step_z = compute_step_mm(err_z)
 
             # If steps are negligibly small but still outside tolerance, break
             if abs(step_x) < 0.001 and abs(step_y) < 0.001 and abs(step_z) < 0.001:
@@ -609,17 +610,7 @@ class MoveRegistry():
                 self.logger.warning("aruco_home: marker remained unstable after move, aborting")
                 return
 
-            new_err = relative_error_mm(rel)
-            for axis_name, step_value in (('x', step_x), ('y', step_y), ('z', step_z)):
-                if abs(step_value) < worsening_margin_mm:
-                    continue
-                if abs(new_err[axis_name]) > abs(err[axis_name]) + worsening_margin_mm:
-                    axis_polarity[axis_name] *= -1.0
-                    self.logger.info(
-                        f"aruco_home: flipped {axis_name.upper()} correction polarity after error worsened "
-                        f"from {err[axis_name]:.3f}mm to {new_err[axis_name]:.3f}mm"
-                    )
-            err = new_err
+            err = relative_correction_mm(rel)
 
         self.logger.warning("aruco_home: max iterations reached without alignment")
         
