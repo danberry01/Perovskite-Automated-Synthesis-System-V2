@@ -50,6 +50,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         # State tracking
         self._is_paused = False
         self._calibration_in_progress = False
+        self._manual_home_in_progress = False
         self._cancel_requested = False
         self._verification_results: List[Tuple[float, float, float]] = []
         self._video_feed_after_id = None
@@ -418,13 +419,41 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             self._call_ui(self._reset_calibration)
     
     def _home_gantry(self):
-        """Home the gantry to origin"""
-        self._update_status("Homing gantry...")
-        self.logger.debug("Homing gantry")
-        self.control_board.send_message("G28")
-        self.control_board.finish_moves()
-        self._update_status("Gantry homed")
-        self._refresh_position()
+        """Home the gantry to origin without blocking the UI thread."""
+        if self._calibration_in_progress:
+            self._update_status("Cannot home while calibration scan is running")
+            return
+        if self._manual_home_in_progress:
+            self._update_status("Homing already in progress")
+            return
+
+        self._manual_home_in_progress = True
+        self.home_button.configure(state="disabled")
+        self.scan_button.configure(state="disabled")
+        threading.Thread(target=self._home_gantry_worker, daemon=True).start()
+
+    def _home_gantry_worker(self):
+        try:
+            self._call_ui(self._update_status, "Homing gantry...")
+            self.logger.debug("Homing gantry")
+            if hasattr(self.dispatcher, 'toolhead') and self.dispatcher.toolhead is not None:
+                self.dispatcher.toolhead.home()
+            else:
+                self.control_board.send_message("G28", require_lock=True)
+                self.control_board.finish_moves()
+            self._call_ui(self._update_status, "Gantry homed")
+            self._call_ui(self._refresh_position)
+        except Exception as exc:
+            self.logger.exception(f"Calibration homing failed: {exc}")
+            self._call_ui(self._update_status, f"Homing failed: {exc}")
+        finally:
+            def _reset_manual_home_state():
+                self._manual_home_in_progress = False
+                self.home_button.configure(state="normal")
+                if not self._calibration_in_progress:
+                    self.scan_button.configure(state="normal")
+
+            self._call_ui(_reset_manual_home_state)
     
     def _refresh_position(self):
         """Refresh the displayed gantry position"""

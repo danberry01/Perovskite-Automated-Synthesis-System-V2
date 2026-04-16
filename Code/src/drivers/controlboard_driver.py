@@ -321,7 +321,10 @@ class ControlBoard():
         """Wait for the move to finish"""
         if not self.is_connected():
             self.logger.error("Serial is not connected")
-            return
+            raise RuntimeError("Control board is not connected")
+        if self.reader_thread is None:
+            self.logger.error("Reader thread is not running")
+            raise RuntimeError("Control board reader thread is not running")
         # Clear any previous OK marker and request move completion
         self.received_ok.clear()
         # Clear any previous move error marker
@@ -342,6 +345,7 @@ class ControlBoard():
         timeout = 120.0
         poll_interval = 0.1
         request_interval = 0.5
+        completed = False
         waited = 0.0
         last_request = time.time()
         while waited < timeout:
@@ -365,12 +369,22 @@ class ControlBoard():
                 last_request = now
 
             if self.received_ok.wait(timeout=poll_interval):
+                completed = True
                 break
             waited += poll_interval
+        if getattr(self, '_kill_event', None) is not None and self._kill_event.is_set():
+            raise RuntimeError("Move aborted by emergency stop")
         # If we exited because of a firmware-reported move error, raise so
         # callers (e.g. procedure runner) can abort and handle it.
         if getattr(self, '_move_error', None) is not None and self._move_error.is_set():
             raise RuntimeError("Firmware reported a move error (see logs)")
+        if not completed:
+            self.logger.error(f"Timed out waiting for move completion after {timeout:.1f}s")
+            raise TimeoutError(f"Timed out waiting for move completion after {timeout:.1f}s")
+        try:
+            self.request_position()
+        except Exception:
+            pass
         
 
 
@@ -387,6 +401,25 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         self.logger = logger
         self.control_board = control_board
         self.logger.debug("Line Reader Started")
+
+    @staticmethod
+    def _is_move_error_line(line: str) -> bool:
+        normalized = line.strip().lower()
+        if normalized.startswith("error"):
+            return True
+
+        error_markers = (
+            "homing failed",
+            "home xyz first",
+            "must home",
+            "endstop hit",
+            "endstops hit",
+            "printer halted",
+            "kill() called",
+            "probe failed",
+            "unknown message",
+        )
+        return any(marker in normalized for marker in error_markers)
 
     def handle_line(self, line):
         """Process each received line."""
@@ -423,7 +456,7 @@ class ControlBoardLineReader(serial.threaded.LineReader):
             # Detect common firmware status echoes indicating a failed move/homing
             # and record a move-level error so waiting loops can abort.
             try:
-                if "homing failed" in line.lower() or line.lower().startswith("error") or "unknown message" in line.lower():
+                if self._is_move_error_line(line):
                     self.control_board._move_error.set()
             except Exception:
                 pass
@@ -439,10 +472,10 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         # messages (including 'echo') as warnings. If they indicate a move
         # error (e.g. homing failed) set the move error event so callers can
         # abort waits.
-        if line.lower().startswith("error") or "unknown message" in line.lower() or line.lower().startswith("echo"):
+        if self._is_move_error_line(line) or line.lower().startswith("echo"):
             self.logger.warning(f"Firmware: {line}")
             try:
-                if "homing failed" in line.lower():
+                if self._is_move_error_line(line):
                     self.control_board._move_error.set()
             except Exception:
                 pass
