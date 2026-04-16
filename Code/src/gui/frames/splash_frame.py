@@ -51,6 +51,10 @@ class SplashFrame(ctk.CTkFrame):
                 self._set_status("No control board driver available")
                 return
 
+            if cb.is_connected():
+                self._set_status("Control board connected")
+                return
+
             self._set_status("Auto-connecting control board...")
             try:
                 cb.connect()

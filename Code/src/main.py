@@ -54,14 +54,7 @@ if __name__ == "__main__":
     
     move_registry.spectrometer_frame = app.tab_view_frame.procedure_viewer_frame.spectrometer_frame
 
-    # program stalls when not everything is connected and this is called
-    # connect to devices
-    dispatcher.spectrometer.connect()
-    dispatcher.control_board.connect()
-    # Use dispatcher helper so preferred resolution is applied to the Camera driver
-    dispatcher.connect_camera()
-    dispatcher.spin_coater.connect()
-    dispatcher.hotplate.connect()
+    logger.info("Startup hardware connections are handled by the UI auto-connect flows")
     
 
     app.mainloop()

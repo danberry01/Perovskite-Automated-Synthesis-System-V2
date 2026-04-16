@@ -35,14 +35,19 @@ class Spectrometer:
 
     def connect(self):
         """Establish connection to the spectrometer"""
-        
-        
+        if self.is_connected():
+            self.logger.debug("Spectrometer already connected")
+            return True
+
         port = "/dev/spectrometer"
         try:
             self.serial = serial.Serial(port, baudrate=115200, timeout=5)  
             self.logger.info(f"Connected to spectrometer on {port}")
+            return True
         except serial.SerialException as e:
-            self.logger.error(f"Error connecting to spectrometer: {e}")
+            self.logger.warning(f"Spectrometer not connected on {port}: {e}")
+            self.serial = None
+            return False
 
     def disconnect(self):
         """Close the serial connection"""

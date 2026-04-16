@@ -21,6 +21,7 @@ from drivers.spincoater_driver import SpinCoater
 from drivers.spectrometer_driver import Spectrometer
 from drivers.procedure_file_driver import ProcedureFile
 from services.image_processing import ImageProcessor
+from services.data_processor import plot_spectra, save_all_to_csv
 from drivers.a_star_driver import AStarPlanner
 
 class MoveRegistry():
@@ -169,6 +170,11 @@ class MoveRegistry():
         Attempts to stop motion immediately and unblock any waiting operations.
         """
         self.logger.error("MoveRegistry: Emergency kill invoked")
+        try:
+            if self.dispatcher and hasattr(self.dispatcher, 'notify_emergency_stop'):
+                self.dispatcher.notify_emergency_stop()
+        except Exception as e:
+            self.logger.exception(f"Error while notifying emergency stop listeners: {e}")
         # Control board
         try:
             if self.control_board:
@@ -843,7 +849,9 @@ class MoveRegistry():
         self.logger.debug("MoveRegistry: resetting kill state on hardware")
         try:
             if hasattr(self, 'control_board') and self.control_board:
-                if hasattr(self.control_board, 'reset_kill'):
+                if hasattr(self.control_board, 'is_killed') and not self.control_board.is_killed():
+                    self.logger.debug("MoveRegistry: control board kill state already clear")
+                elif hasattr(self.control_board, 'reset_kill'):
                     self.control_board.reset_kill()
         except Exception as e:
             self.logger.exception(f"Error while resetting control board kill state: {e}")
@@ -869,8 +877,8 @@ class MoveRegistry():
             self.measure_spectrum(measurement)
             sleep(1.0) 
             
-        save_all_to_csv(self.measurements, self.wavelengths)
-        plot_spectra(self.measurements, self.wavelengths)
+        save_all_to_csv(self.wavelengths, self.measurements)
+        plot_spectra(self.wavelengths, self.measurements)
         
         self.logger.info("All spectrometer measurements completed successfully.")
     

@@ -236,7 +236,8 @@ class InfoFrame(ctk.CTkFrame):
                         'use_tls': False,
                         'use_ssl': False,
                         'timeout': 10,
-                        'sendmail_path': ''
+                        'sendmail_path': '',
+                        'mail_path': ''
                     },
                     'from': self._build_default_from_address(),
                     'recipients': ['dcounte1@binghamton.edu']
@@ -330,7 +331,7 @@ class InfoFrame(ctk.CTkFrame):
             self._deliver_email_message(message)
             self.after(0, lambda: self._write_email_status("INFO", f"Sent console log to {recipient}"))
         except Exception as e:
-            logging.getLogger("Main Logger").exception("Failed to send console email: %s", e)
+            logging.getLogger("Main Logger").error("Failed to send console email: %s", e)
             self.after(0, lambda: self._write_email_status("ERROR", f"Failed to send email: {e}"))
         finally:
             self.after(0, lambda: self._set_email_button_state(enabled=True, text="Email Console"))
@@ -357,16 +358,16 @@ class InfoFrame(ctk.CTkFrame):
     def _deliver_email_message(self, message: EmailMessage):
         smtp = getattr(self, '_smtp_config', {}) or {}
         transport = str(smtp.get('transport', 'auto')).strip().lower() or 'auto'
-        if transport not in ('auto', 'smtp', 'sendmail'):
+        if transport not in ('auto', 'smtp', 'sendmail', 'mail'):
             transport = 'auto'
 
-        smtp_error = None
+        errors = []
         if transport in ('auto', 'smtp'):
             try:
                 self._send_via_smtp(message, smtp)
                 return
             except Exception as exc:
-                smtp_error = exc
+                errors.append(f"SMTP delivery failed: {exc}")
                 if transport == 'smtp':
                     raise
 
@@ -375,12 +376,21 @@ class InfoFrame(ctk.CTkFrame):
                 self._send_via_sendmail(message, smtp)
                 return
             except Exception as exc:
-                if smtp_error is not None:
-                    raise RuntimeError(f"SMTP delivery failed: {smtp_error}; sendmail fallback failed: {exc}") from exc
-                raise
+                errors.append(f"sendmail delivery failed: {exc}")
+                if transport == 'sendmail':
+                    raise
 
-        if smtp_error is not None:
-            raise smtp_error
+        if transport in ('auto', 'mail'):
+            try:
+                self._send_via_mail_command(message, smtp)
+                return
+            except Exception as exc:
+                errors.append(f"mail delivery failed: {exc}")
+                if transport == 'mail':
+                    raise
+
+        if errors:
+            raise RuntimeError("; ".join(errors))
 
     def _send_via_smtp(self, message: EmailMessage, smtp_config: dict):
         host = str(smtp_config.get('host') or 'localhost').strip()
@@ -405,7 +415,7 @@ class InfoFrame(ctk.CTkFrame):
     def _send_via_sendmail(self, message: EmailMessage, smtp_config: dict):
         sendmail_path = self._resolve_sendmail_path(smtp_config)
         if sendmail_path is None:
-            raise FileNotFoundError("No sendmail binary found. Configure SMTP or install sendmail/postfix.")
+            raise FileNotFoundError("No sendmail-compatible binary found. Configure SMTP or install sendmail, msmtp, or postfix.")
 
         timeout = self._coerce_float(smtp_config.get('timeout'), 10.0)
         result = subprocess.run(
@@ -420,19 +430,69 @@ class InfoFrame(ctk.CTkFrame):
             stderr = result.stderr.decode('utf-8', errors='replace').strip()
             raise RuntimeError(stderr or f"sendmail exited with code {result.returncode}")
 
+    def _send_via_mail_command(self, message: EmailMessage, smtp_config: dict):
+        mail_path = self._resolve_mail_path(smtp_config)
+        if mail_path is None:
+            raise FileNotFoundError("No mail or mailx binary found. Configure SMTP or install mailutils/bsd-mailx.")
+
+        timeout = self._coerce_float(smtp_config.get('timeout'), 10.0)
+        recipient = str(message.get('To') or '').strip()
+        subject = str(message.get('Subject') or '').strip()
+        body = self._extract_text_body(message)
+        result = subprocess.run(
+            [mail_path, '-s', subject, recipient],
+            input=body.encode('utf-8'),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+            check=False
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode('utf-8', errors='replace').strip()
+            raise RuntimeError(stderr or f"{os.path.basename(mail_path)} exited with code {result.returncode}")
+
     def _resolve_sendmail_path(self, smtp_config: dict):
         configured_path = str(smtp_config.get('sendmail_path') or '').strip()
         candidates = [configured_path] if configured_path else []
         candidates.extend([
             shutil.which('sendmail'),
+            shutil.which('msmtp'),
             '/usr/sbin/sendmail',
-            '/usr/bin/sendmail'
+            '/usr/bin/sendmail',
+            '/usr/bin/msmtp'
         ])
 
         for path in candidates:
             if path and os.path.isfile(path) and os.access(path, os.X_OK):
                 return path
         return None
+
+    def _resolve_mail_path(self, smtp_config: dict):
+        configured_path = str(smtp_config.get('mail_path') or '').strip()
+        candidates = [configured_path] if configured_path else []
+        candidates.extend([
+            shutil.which('mail'),
+            shutil.which('mailx'),
+            '/usr/bin/mail',
+            '/usr/bin/mailx'
+        ])
+
+        for path in candidates:
+            if path and os.path.isfile(path) and os.access(path, os.X_OK):
+                return path
+        return None
+
+    def _extract_text_body(self, message: EmailMessage) -> str:
+        body = message.get_body(preferencelist=('plain',))
+        if body is not None:
+            try:
+                return body.get_content()
+            except Exception:
+                pass
+        try:
+            return message.get_content()
+        except Exception:
+            return message.as_string()
 
     def _coerce_bool(self, value, default: bool) -> bool:
         if isinstance(value, bool):

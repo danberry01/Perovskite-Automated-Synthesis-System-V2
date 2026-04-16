@@ -139,35 +139,40 @@ class ConnectionFrame(ctk.CTkFrame):
         try:
             # Try control board first (most critical)
             try:
-                self.control_board.connect()
+                if not self.control_board.is_connected():
+                    self.control_board.connect()
             except Exception as e:
                 logger.debug(f"Control board auto-connect attempt raised: {e}")
             self.control_board_connection.set_connection_status(self.control_board.is_connected())
 
             # Try the spin coater
             try:
-                self.spin_coater.connect()
+                if not self.spin_coater.is_connected():
+                    self.spin_coater.connect()
             except Exception as e:
                 logger.debug(f"Spin coater auto-connect attempt raised: {e}")
             self.spin_coater_connection.set_connection_status(self.spin_coater.is_connected())
 
             # Try hotplate
             try:
-                self.hotplate.connect()
+                if not self.hotplate.is_connected():
+                    self.hotplate.connect()
             except Exception as e:
                 logger.debug(f"Hotplate auto-connect attempt raised: {e}")
             self.hotplate_connection.set_connection_status(self.hotplate.is_connected())
 
             # Try spectrometer
             try:
-                self.spectrometer.connect()
+                if not self.spectrometer.is_connected():
+                    self.spectrometer.connect()
             except Exception as e:
                 logger.debug(f"Spectrometer auto-connect attempt raised: {e}")
             self.spectrometer_connection.set_connection_status(self.spectrometer.is_connected())
 
             # Try camera via dispatcher helper
             try:
-                self.dispatcher.connect_camera()
+                if not self.camera.is_connected():
+                    self.dispatcher.connect_camera()
             except Exception as e:
                 logger.debug(f"Camera auto-connect attempt raised: {e}")
             self.camera_connection.set_connection_status(self.camera.is_connected())

@@ -35,6 +35,7 @@ class Dispatcher:
         
         # Camera connection callbacks - for linking buttons
         self._camera_connection_callbacks = []
+        self._emergency_stop_callbacks = []
         
         # Pipette handler
         self.pipettes = [
@@ -87,6 +88,25 @@ class Dispatcher:
                 import logging
                 logger = logging.getLogger("Main Logger")
                 logger.error(f"Error in camera connection callback: {e}")
+
+    def register_emergency_stop_callback(self, callback):
+        """Register a callback to be notified when an emergency stop is triggered."""
+        self._emergency_stop_callbacks.append(callback)
+
+    def unregister_emergency_stop_callback(self, callback):
+        """Unregister an emergency stop callback."""
+        if callback in self._emergency_stop_callbacks:
+            self._emergency_stop_callbacks.remove(callback)
+
+    def notify_emergency_stop(self):
+        """Notify all registered listeners that an emergency stop was requested."""
+        for callback in list(self._emergency_stop_callbacks):
+            try:
+                callback()
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("Main Logger")
+                logger.error(f"Error in emergency stop callback: {e}")
 
     def connect_camera(self):
         """

@@ -21,10 +21,6 @@ class Toolhead():
             try:
                 self.control_board.send_message(f"G28 {axis}", require_lock=True)
                 self.control_board.finish_moves()
-                try:
-                    self.control_board.request_position()
-                except Exception:
-                    pass
                 logger.info(f"Homed {axis}; position {axis}={self.get_position(axis)}")
             except Exception as exc:
                 logger.exception(f"Homing {axis} failed")

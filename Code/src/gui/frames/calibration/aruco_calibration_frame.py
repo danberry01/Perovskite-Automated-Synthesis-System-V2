@@ -12,6 +12,10 @@ from drivers.controlboard_driver import ControlBoard
 from .aruco_calibration_layout import ArucoCalibrationLayout
 
 
+class CalibrationAborted(RuntimeError):
+    """Raised when calibration is cancelled or interrupted by emergency stop."""
+
+
 class ArucoCalibrationFrame(ctk.CTkFrame):
     """Frame for calibrating ArUco marker positions.
 
@@ -30,6 +34,11 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.logger = logging.getLogger("Main Logger")
         self.dispatcher = dispatcher
         self.control_board: ControlBoard = dispatcher.control_board
+        try:
+            if hasattr(self.dispatcher, 'register_emergency_stop_callback'):
+                self.dispatcher.register_emergency_stop_callback(self._handle_emergency_stop)
+        except Exception:
+            self.logger.exception("Failed to register calibration emergency-stop callback")
         
         # Use shared ArUco detector and Camera driver from dispatcher
         self.aruco_detector = dispatcher.aruco_detector
@@ -163,11 +172,36 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
     def resume_updates(self):
         """Resume camera display when frame becomes visible"""
         self._start_camera_display()
+
+    def _is_emergency_stop_active(self) -> bool:
+        try:
+            return bool(self.control_board.is_killed())
+        except Exception:
+            return False
+
+    def _should_abort(self) -> bool:
+        return self._cancel_requested or self._is_emergency_stop_active()
+
+    def _abort_if_requested(self):
+        if self._cancel_requested:
+            raise CalibrationAborted("Calibration cancelled by user")
+        if self._is_emergency_stop_active():
+            raise CalibrationAborted("Calibration cancelled by emergency stop")
+
+    def _handle_emergency_stop(self):
+        if not self._calibration_in_progress:
+            return
+        self._cancel_requested = True
+        self.logger.info("Calibration abort triggered by emergency stop")
+        self._call_ui(self._update_status, "Calibration cancelled by emergency stop")
     
     def _start_calibration_scan(self):
         """Start the calibration scanning process in a background thread"""
         if self._calibration_in_progress:
             self.logger.warning("Calibration already in progress")
+            return
+        if self._is_emergency_stop_active():
+            self._update_status("Clear emergency stop before starting calibration")
             return
         
         self.scan_button.configure(state="disabled")
@@ -189,7 +223,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         try:
             # Worker reads frames from the UI-updated `_last_frame` buffer to
             # avoid multiple threads reading from the same VideoCapture.
-            while not self._cancel_requested:
+            while not self._should_abort():
+                self._abort_if_requested()
                 self._call_ui(self._update_status, "Scanning for markers...")
 
                 start_time = time.time()
@@ -201,7 +236,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                 min_detections_per_marker = 3
                 span_threshold_m = 0.01  # 10 mm spread allowed across detections
 
-                while time.time() - start_time < scan_window and not self._cancel_requested:
+                while time.time() - start_time < scan_window and not self._should_abort():
                     with self._frame_lock:
                         frame = None if self._last_frame is None else self._last_frame.copy()
                     if frame is None:
@@ -223,8 +258,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
 
                     time.sleep(0.02)
 
-                if self._cancel_requested:
-                    break
+                self._abort_if_requested()
 
                 if not detected_markers:
                     self._call_ui(self._update_status, "No markers detected. Retry in 1 sec or Cancel.")
@@ -258,6 +292,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     continue
 
                 # Record the gantry position(s) where each marker was observed
+                self._abort_if_requested()
                 recorded_gantry = self._get_gantry_position_snapshot(refresh=True)
                 recorded_gantry_positions = {mid: recorded_gantry.copy() for mid in marker_positions.keys()}
 
@@ -266,8 +301,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                 verified_results = {}
 
                 for marker_id, rel_pos in marker_positions.items():
-                    if self._cancel_requested:
-                        break
+                    self._abort_if_requested()
 
                     # Safety limits and verification tuning
                     tolerance_mm = 20.0
@@ -279,13 +313,18 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
 
                     self.logger.info(f"Verifying Marker {marker_id} (relative camera pos x={rel_pos['x']:.3f} y={rel_pos['y']:.3f} z={rel_pos['z']:.3f}); recorded gantry {recorded_gantry}")
 
-                    while consecutive_successes < 3 and attempts < max_attempts and not self._cancel_requested:
+                    while consecutive_successes < 3 and attempts < max_attempts and not self._should_abort():
                         attempts += 1
                         self._call_ui(self._update_status, f"Attempt {attempts}: Homing and verifying Marker {marker_id}...")
 
                         try:
+                            self._abort_if_requested()
                             self._home_for_verification_attempt(attempts)
+                        except CalibrationAborted:
+                            raise
                         except Exception as e:
+                            if self._should_abort():
+                                self._abort_if_requested()
                             self.logger.exception(f"Failed to home gantry on attempt {attempts} for Marker {marker_id}: {e}")
                             time.sleep(0.3)
                             consecutive_successes = 0
@@ -293,15 +332,20 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
 
                         # Move to the recorded gantry position and ensure the move finished
                         try:
+                            self._abort_if_requested()
                             target = recorded_gantry
                             self.logger.debug(f"Moving to recorded gantry pos for Marker {marker_id}: {target}")
                             self._move_to_gantry_reference(target)
                             # Request position update to refresh `self.control_board.positions`
                             try:
-                                self.control_board.request_position()
+                                self.control_board.request_position(wait=True, timeout=1.0)
                             except Exception:
                                 pass
+                        except CalibrationAborted:
+                            raise
                         except Exception as e:
+                            if self._should_abort():
+                                self._abort_if_requested()
                             self.logger.exception(f"Failed to move to recorded gantry pos for Marker {marker_id} on attempt {attempts}: {e}")
                             consecutive_successes = 0
                             time.sleep(0.3)
@@ -309,21 +353,23 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
 
                         # Longer settle to allow mechanical vibration to die out
                         # Wait for a fresh frame after motion
+                        self._abort_if_requested()
                         last_frame_id = id(self._last_frame)
 
                         timeout = time.time() + 5.0
-                        while time.time() < timeout:
+                        while time.time() < timeout and not self._should_abort():
                             with self._frame_lock:
                                 if self._last_frame is not None and id(self._last_frame) != last_frame_id:
                                     break
                             time.sleep(0.01)
+                        self._abort_if_requested()
 
                         # Now scan briefly for the marker at the moved position using
                         # the UI-updated frame buffer (avoid direct VideoCapture reads).
                         scan_start = time.time()
                         detections = []
                         scan_timeout = 5.0
-                        while time.time() - scan_start < scan_timeout and not self._cancel_requested:
+                        while time.time() - scan_start < scan_timeout and not self._should_abort():
                             with self._frame_lock:
                                 frame = None if self._last_frame is None else self._last_frame.copy()
                             if frame is None:
@@ -337,6 +383,8 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                                 if m['id'] == marker_id:
                                     detections.append(m['position'])
                             time.sleep(0.02)
+
+                        self._abort_if_requested()
 
                         if not detections:
                             self.logger.warning(f"Marker {marker_id} not detected on attempt {attempts}")
@@ -386,8 +434,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     else:
                         self.logger.warning(f"Marker {marker_id} verification unsuccessful after {attempts} attempts")
 
-                if self._cancel_requested:
-                    break
+                self._abort_if_requested()
 
                 if not verified_results:
                     self._call_ui(self._update_status, "No verified markers, retrying scan.")
@@ -403,9 +450,11 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                 self._call_ui(_finish_save)
                 return
 
-            if self._cancel_requested:
-                self._call_ui(self._update_status, "Calibration cancelled by user")
+            self._abort_if_requested()
 
+        except CalibrationAborted as exc:
+            self.logger.info(str(exc))
+            self._call_ui(self._update_status, str(exc))
         except Exception as e:
             self.logger.error(f"Calibration error: {e}")
             self._call_ui(self._update_status, f"Error: {e}")
@@ -415,14 +464,13 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
     def _get_gantry_position_snapshot(self, refresh: bool = True):
         if refresh:
             try:
-                self.control_board.request_position()
+                self.control_board.request_position(wait=True, timeout=1.0)
             except Exception:
                 pass
-            import time
-            time.sleep(0.2)
         return self.control_board.positions.copy()
 
     def _home_for_verification_attempt(self, attempt_number: int):
+        self._abort_if_requested()
         toolhead = getattr(self.dispatcher, 'toolhead', None)
         if toolhead is None:
             raise RuntimeError("Toolhead not available for calibration homing")
@@ -435,6 +483,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         toolhead.home_xy()
 
     def _move_to_gantry_reference(self, target):
+        self._abort_if_requested()
         toolhead = getattr(self.dispatcher, 'toolhead', None)
         if toolhead is None:
             raise RuntimeError("Toolhead not available for calibration move")
@@ -446,12 +495,16 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
 
         def _run_move(move_callable, description: str):
             try:
+                self._abort_if_requested()
                 move_callable()
+            except CalibrationAborted:
+                raise
             except Exception as exc:
                 if "paused for user" not in str(exc).lower():
                     raise
                 self.logger.warning(f"Calibration move hit firmware pause during {description}; sending M108 and retrying once")
                 self.control_board.resume_from_user_pause()
+                self._abort_if_requested()
                 move_callable()
 
         if travel_z > current_z + 0.5:
@@ -473,6 +526,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
 
     def _prepare_for_rehome(self):
         """Lift Z clear of the probe trigger area before repeating a home cycle."""
+        self._abort_if_requested()
         toolhead = getattr(self.dispatcher, 'toolhead', None)
         if toolhead is None:
             return
