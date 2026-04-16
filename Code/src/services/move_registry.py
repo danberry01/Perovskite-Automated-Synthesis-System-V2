@@ -374,12 +374,16 @@ class MoveRegistry():
         """
         # Config
         calibration_file = _get_aruco_calibration_file_path()
-        scan_timeout_s = 2.0
-        rescan_timeout_s = 1.0
-        tolerance_mm = 1.0
-        max_iterations = 50
-        max_step_mm = 0.5
-        worsening_margin_mm = 0.25
+        scan_timeout_s = 3.0
+        rescan_timeout_s = 1.5
+        scan_warmup_s = 0.35
+        post_move_settle_s = 0.35
+        stable_rescan_attempts = 3
+        min_detections_per_marker = 4
+        span_threshold_m = 0.012
+        tolerance_mm = 2.0
+        max_iterations = 60
+        worsening_margin_mm = 2.0
 
         # Basic checks
         if not getattr(self, 'camera', None) or not self.camera.is_connected():
@@ -413,7 +417,12 @@ class MoveRegistry():
             return
 
         # Helper: perform a short scan and aggregate detections
-        def scan_for_markers(timeout_s: float):
+        def scan_for_markers(timeout_s: float, warmup_s: float = 0.0):
+            warmup_end = time.time() + max(0.0, warmup_s)
+            while time.time() < warmup_end:
+                self.camera.get_frame()
+                sleep(0.02)
+
             end_t = time.time() + timeout_s
             detections = {}
             while time.time() < end_t:
@@ -436,18 +445,80 @@ class MoveRegistry():
                 # small sleep to yield
                 sleep(0.01)
 
-            # Average positions
+            # Filter and aggregate stable positions only
             avg = {}
+            stats = {}
             for mid, pts in detections.items():
-                avg[mid] = {
-                    'x': sum(p['x'] for p in pts) / len(pts),
-                    'y': sum(p['y'] for p in pts) / len(pts),
-                    'z': sum(p['z'] for p in pts) / len(pts),
+                if len(pts) < min_detections_per_marker:
+                    self.logger.debug(f"aruco_home: marker {mid} seen only {len(pts)} times during scan; skipping")
+                    continue
+
+                xs = np.array([p['x'] for p in pts], dtype=float)
+                ys = np.array([p['y'] for p in pts], dtype=float)
+                zs = np.array([p['z'] for p in pts], dtype=float)
+                span_x = float(xs.max() - xs.min())
+                span_y = float(ys.max() - ys.min())
+                span_z = float(zs.max() - zs.min())
+                stats[mid] = {
+                    'count': len(pts),
+                    'span_x': span_x,
+                    'span_y': span_y,
+                    'span_z': span_z,
                 }
-            return avg
+
+                if span_x > span_threshold_m or span_y > span_threshold_m or span_z > span_threshold_m:
+                    self.logger.debug(
+                        f"aruco_home: marker {mid} detections too spread (m): "
+                        f"x={span_x:.4f} y={span_y:.4f} z={span_z:.4f}; rescanning"
+                    )
+                    continue
+
+                avg[mid] = {
+                    'x': float(np.median(xs)),
+                    'y': float(np.median(ys)),
+                    'z': float(np.median(zs)),
+                }
+            return avg, stats
+
+        def scan_for_stable_marker(marker_id: int, timeout_s: float, attempts: int, warmup_s: float):
+            last_stats = None
+            for attempt in range(1, attempts + 1):
+                detected_positions, detected_stats = scan_for_markers(timeout_s, warmup_s=warmup_s)
+                last_stats = detected_stats
+                rel_pos = detected_positions.get(marker_id)
+                if rel_pos is not None:
+                    stats = detected_stats.get(marker_id, {})
+                    self.logger.debug(
+                        f"aruco_home: stable scan for marker {marker_id} succeeded on pass {attempt}/{attempts} "
+                        f"with {stats.get('count', 0)} detections"
+                    )
+                    return rel_pos, last_stats
+
+                if marker_id in detected_stats:
+                    stats = detected_stats[marker_id]
+                    self.logger.debug(
+                        f"aruco_home: marker {marker_id} still unstable on pass {attempt}/{attempts}; "
+                        f"count={stats.get('count', 0)} spans(m) x={stats.get('span_x', 0.0):.4f} "
+                        f"y={stats.get('span_y', 0.0):.4f} z={stats.get('span_z', 0.0):.4f}"
+                    )
+                else:
+                    self.logger.debug(f"aruco_home: marker {marker_id} not yet stable on pass {attempt}/{attempts}")
+            return None, last_stats
+
+        def compute_step_mm(error_mm: float) -> float:
+            magnitude = abs(error_mm)
+            if magnitude > 25.0:
+                step_limit = 2.5
+            elif magnitude > 10.0:
+                step_limit = 1.5
+            elif magnitude > 4.0:
+                step_limit = 0.75
+            else:
+                step_limit = 0.4
+            return max(-step_limit, min(step_limit, error_mm))
 
         # Initial scan
-        detected = scan_for_markers(scan_timeout_s)
+        detected, detected_stats = scan_for_markers(scan_timeout_s, warmup_s=scan_warmup_s)
         if not detected:
             self.logger.info("aruco_home: no markers detected")
             return
@@ -504,9 +575,9 @@ class MoveRegistry():
 
             # Compute step in camera-relative marker space. Axis polarity flips
             # automatically if a move makes that axis worse on the next scan.
-            step_x = axis_polarity['x'] * max(-max_step_mm, min(max_step_mm, err_x))
-            step_y = axis_polarity['y'] * max(-max_step_mm, min(max_step_mm, err_y))
-            step_z = axis_polarity['z'] * max(-max_step_mm, min(max_step_mm, err_z))
+            step_x = axis_polarity['x'] * compute_step_mm(err_x)
+            step_y = axis_polarity['y'] * compute_step_mm(err_y)
+            step_z = axis_polarity['z'] * compute_step_mm(err_z)
 
             # If steps are negligibly small but still outside tolerance, break
             if abs(step_x) < 0.001 and abs(step_y) < 0.001 and abs(step_z) < 0.001:
@@ -525,12 +596,17 @@ class MoveRegistry():
                 return
 
             # allow motion settle
-            sleep(0.15)
+            sleep(post_move_settle_s)
 
-            # Rescan to update relative position (note: use initial_gantry for comparisons)
-            rel = scan_for_markers(rescan_timeout_s).get(matched_id)
+            # Rescan to update relative position after exposure/pose settles.
+            rel, _ = scan_for_stable_marker(
+                matched_id,
+                timeout_s=rescan_timeout_s,
+                attempts=stable_rescan_attempts,
+                warmup_s=scan_warmup_s,
+            )
             if not rel:
-                self.logger.warning("aruco_home: marker lost after move, aborting")
+                self.logger.warning("aruco_home: marker remained unstable after move, aborting")
                 return
 
             new_err = relative_error_mm(rel)
