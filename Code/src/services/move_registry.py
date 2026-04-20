@@ -1101,7 +1101,7 @@ class MoveRegistry():
         self.infeed.servo.angle = angle
         
     def open_infeed(self):
-        self.set_infeed_angle(90)
+        self.set_infeed_angle(60)
         
     def close_infeed(self):
         self.set_infeed_angle(0)
