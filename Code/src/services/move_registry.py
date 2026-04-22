@@ -292,6 +292,50 @@ class MoveRegistry():
 
         # Use per-axis moves for reliability
         self.toolhead.move_to(x=x, y=y, z=z, relative=rrelative, feedrate=1000)
+
+    def _load_persistent_obstacles(self):
+        pf = ProcedureFile()
+        return pf.Open('persistant/obstacles.yml') or pf.Open('persistant/obstacles') or []
+
+    def _clamp_z_to_obstacles(self, target_x: float, target_y: float, requested_z: float, z_clearance_mm: float = 0.0) -> float:
+        """Clamp requested Z so destination does not descend into an obstacle volume."""
+        min_allowed_z = None
+
+        for entry in self._load_persistent_obstacles():
+            try:
+                if isinstance(entry, dict):
+                    x1 = float(entry.get('x1', 0)); y1 = float(entry.get('y1', 0)); z1 = float(entry.get('z1', 0))
+                    x2 = float(entry.get('x2', x1)); y2 = float(entry.get('y2', y1)); z2 = float(entry.get('z2', z1))
+                elif isinstance(entry, (list, tuple)) and len(entry) >= 7:
+                    x1 = float(entry[1]); y1 = float(entry[2]); z1 = float(entry[3])
+                    x2 = float(entry[4]); y2 = float(entry[5]); z2 = float(entry[6])
+                else:
+                    continue
+
+                xmin, xmax = min(x1, x2), max(x1, x2)
+                ymin, ymax = min(y1, y2), max(y1, y2)
+                top_z = max(z1, z2)
+
+                if xmin <= target_x <= xmax and ymin <= target_y <= ymax:
+                    candidate_min_z = top_z + float(z_clearance_mm)
+                    if min_allowed_z is None or candidate_min_z > min_allowed_z:
+                        min_allowed_z = candidate_min_z
+            except Exception:
+                continue
+
+        if min_allowed_z is None:
+            return float(requested_z)
+
+        clamped_z = max(float(requested_z), float(min_allowed_z))
+        if clamped_z != float(requested_z):
+            self.logger.warning(
+                "Requested Z %.3f at X=%.3f, Y=%.3f intersects a persistent obstacle; clamping to %.3f",
+                float(requested_z),
+                float(target_x),
+                float(target_y),
+                float(clamped_z),
+            )
+        return clamped_z
         
     def soft_limit_axis_move(self, x: float, y: float, z: float, relative: int):
         """Move to a target while avoiding obstacles listed in persistant/obstacles.yml.
@@ -323,6 +367,9 @@ class MoveRegistry():
                 tx = float(x)
                 ty = float(y)
                 tz = float(z)
+
+            # Never descend into obstacle volumes at destination XY.
+            tz = self._clamp_z_to_obstacles(tx, ty, tz)
         except Exception as e:
             raise ValueError(f"Invalid target coordinates: {e}")
 
@@ -722,9 +769,9 @@ class MoveRegistry():
         for location in self.locations:
             if destination == location[0]:
                 
-                x = location[1]
-                y = location[2]
-                z = location[3]
+                x = float(location[1])
+                y = float(location[2])
+                z = self._clamp_z_to_obstacles(x, y, float(location[3]))
                 
                 self.toolhead.move_axis("Z", 142)
                 sleep(1)

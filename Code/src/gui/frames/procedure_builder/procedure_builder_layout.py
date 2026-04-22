@@ -19,7 +19,7 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
 
         self.columnconfigure(0, weight = 1, minsize = 500)
         self.columnconfigure(1, weight = 0, minsize = 300)
-        self.columnconfigure(2, weight = 0)
+        self.columnconfigure(2, weight = 0, minsize = 0)
         
         self.rowconfigure(0, weight = 0)
         self.rowconfigure(1, weight = 0)
@@ -70,11 +70,46 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
         self.connection_frame = ConnectionFrame(master = self, dispatcher = self.dispatcher)
         self.connection_frame.grid(row = 1, column = 1, columnspan = 2, padx = 10, pady = 10, sticky = "nsew")
 
-        self.locations_frame = LocationsFrame(master = self)
-        self.locations_frame.grid(row = 2, column = 1, rowspan = 2, padx = 10, pady = 10, sticky = "nsew")
+        self.persistence_frame = ctk.CTkFrame(self, fg_color=FOREGROUND_COLOR, corner_radius=0)
+        self.persistence_frame.grid(row=2, column=1, columnspan=2, rowspan=2, padx=10, pady=10, sticky="nsew")
+        self.persistence_frame.columnconfigure(0, weight=1)
+        self.persistence_frame.rowconfigure(1, weight=1)
 
-        self.obstacles_frame = ObstaclesFrame(master = self)
-        self.obstacles_frame.grid(row = 2, column = 2, rowspan = 2, padx = 10, pady = 10, sticky = "nsew")
+        self.persistence_tabs = ctk.CTkFrame(self.persistence_frame, fg_color="transparent", corner_radius=0)
+        self.persistence_tabs.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="w")
+
+        self.locations_tab_button = ctk.CTkButton(
+            self.persistence_tabs,
+            text="Locations",
+            width=86,
+            height=24,
+            corner_radius=0,
+            command=lambda: self._show_persistence_panel("locations")
+        )
+        self.locations_tab_button.grid(row=0, column=0, padx=(0, 4), pady=0)
+
+        self.obstacles_tab_button = ctk.CTkButton(
+            self.persistence_tabs,
+            text="Obstacles",
+            width=86,
+            height=24,
+            corner_radius=0,
+            command=lambda: self._show_persistence_panel("obstacles")
+        )
+        self.obstacles_tab_button.grid(row=0, column=1, padx=0, pady=0)
+
+        self.persistence_content = ctk.CTkFrame(self.persistence_frame, fg_color="transparent", corner_radius=0)
+        self.persistence_content.grid(row=1, column=0, padx=0, pady=(0, 0), sticky="nsew")
+        self.persistence_content.columnconfigure(0, weight=1)
+        self.persistence_content.rowconfigure(0, weight=1)
+
+        self.locations_frame = LocationsFrame(master=self.persistence_content)
+        self.locations_frame.grid(row=0, column=0, sticky="nsew")
+
+        self.obstacles_frame = ObstaclesFrame(master=self.persistence_content)
+        self.obstacles_frame.grid(row=0, column=0, sticky="nsew")
+
+        self._show_persistence_panel("locations")
     
     def _change_procedures_dir(self):
         """Allow user to change the procedures directory"""
@@ -88,3 +123,16 @@ class ProcedureBuilderFrame(ctk.CTkFrame):
             self.dir_display.configure(text=new_dir)
             import logging
             logging.getLogger("Main Logger").info(f"Procedures directory changed to: {new_dir}")
+
+    def _show_persistence_panel(self, panel_name: str):
+        if panel_name == "obstacles":
+            self.locations_frame.grid_remove()
+            self.obstacles_frame.grid()
+            self.locations_tab_button.configure(fg_color=FOREGROUND_COLOR, hover_color=FOREGROUND_COLOR)
+            self.obstacles_tab_button.configure(fg_color=PLAIN_TEXT_COLOR, hover_color=FOREGROUND_COLOR_TWO)
+            return
+
+        self.obstacles_frame.grid_remove()
+        self.locations_frame.grid()
+        self.locations_tab_button.configure(fg_color=PLAIN_TEXT_COLOR, hover_color=FOREGROUND_COLOR_TWO)
+        self.obstacles_tab_button.configure(fg_color=FOREGROUND_COLOR, hover_color=FOREGROUND_COLOR)
