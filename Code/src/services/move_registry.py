@@ -445,10 +445,13 @@ class MoveRegistry():
                 f"soft_limit_axis_move target ({tx}, {ty}, {tz}) intersects obstacle '{hit_obstacle}'. Move blocked."
             )
 
+        SAFE_Z = 200
+        xy_travel_z = max(float(cz), float(SAFE_Z))
+
         planner = AStarPlanner()
         path = None
         try:
-            path = planner.plan((cx, cy, cz), (tx, ty, tz), raw_obstacles=obstacles)
+            path = planner.plan((cx, cy, cz), (tx, ty, tz), raw_obstacles=obstacles, travel_z=xy_travel_z)
         except Exception as e:
             if obstacles:
                 raise RuntimeError(f"soft_limit_axis_move: path planning failed with obstacles present: {e}")
@@ -459,11 +462,10 @@ class MoveRegistry():
             raise RuntimeError("soft_limit_axis_move: no collision-free path found; move blocked")
 
         # Move to safe Z before XY travel
-        SAFE_Z = 200
         try:
-            # only raise if below SAFE_Z to reduce unnecessary moves
-            if cz < SAFE_Z:
-                self.toolhead.move_axis("Z", SAFE_Z)
+            # only raise if below the XY travel Z to reduce unnecessary moves
+            if cz < xy_travel_z:
+                self.toolhead.move_axis("Z", xy_travel_z)
         except Exception as e:
             self.logger.exception(f"soft_limit_axis_move: failed to raise to SAFE_Z: {e}")
 
@@ -474,7 +476,7 @@ class MoveRegistry():
                 previous_x = cx
                 previous_y = cy
                 for px, py in path[1:]:
-                    hit_obstacle = self._xy_segment_hits_obstacle(previous_x, previous_y, px, py, SAFE_Z, obstacles)
+                    hit_obstacle = self._xy_segment_hits_obstacle(previous_x, previous_y, px, py, xy_travel_z, obstacles)
                     if hit_obstacle is not None:
                         raise RuntimeError(
                             f"soft_limit_axis_move: planned XY segment intersects obstacle '{hit_obstacle}'; move blocked"

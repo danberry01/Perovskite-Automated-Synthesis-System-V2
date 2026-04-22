@@ -89,7 +89,12 @@ class AStarPlanner:
                         blocked.add((ix, iy))
         return blocked
 
-    def plan(self, start: Tuple[float, float, float], goal: Tuple[float, float, float], raw_obstacles: Optional[List] = None) -> Optional[List[Tuple[float, float]]]:
+    def _filter_obstacles_for_travel_z(self, obstacles, travel_z: Optional[float]):
+        if travel_z is None:
+            return obstacles
+        return [ob for ob in obstacles if ob['z1'] <= float(travel_z) <= ob['z2']]
+
+    def plan(self, start: Tuple[float, float, float], goal: Tuple[float, float, float], raw_obstacles: Optional[List] = None, travel_z: Optional[float] = None) -> Optional[List[Tuple[float, float]]]:
         """Plan an XY path from start to goal avoiding obstacles.
 
         Args:
@@ -104,6 +109,7 @@ class AStarPlanner:
         gx, gy, gz = float(goal[0]), float(goal[1]), float(goal[2])
 
         obstacles = self._normalize_obstacles(raw_obstacles)
+        travel_obstacles = self._filter_obstacles_for_travel_z(obstacles, travel_z)
 
         # Quick check: if start or goal inside an obstacle (including clearance), planning fails
         for ob in obstacles:
@@ -113,14 +119,14 @@ class AStarPlanner:
                 raise ValueError("Goal is inside an obstacle")
 
         # If no obstacles, return straight-line path
-        if not obstacles:
+        if not travel_obstacles:
             return [(sx, sy), (gx, gy)]
 
         # Bounding box
-        min_x = min(sx, gx, min(o['x1'] for o in obstacles) - self.resolution)
-        max_x = max(sx, gx, max(o['x2'] for o in obstacles) + self.resolution)
-        min_y = min(sy, gy, min(o['y1'] for o in obstacles) - self.resolution)
-        max_y = max(sy, gy, max(o['y2'] for o in obstacles) + self.resolution)
+        min_x = min(sx, gx, min(o['x1'] for o in travel_obstacles) - self.resolution)
+        max_x = max(sx, gx, max(o['x2'] for o in travel_obstacles) + self.resolution)
+        min_y = min(sy, gy, min(o['y1'] for o in travel_obstacles) - self.resolution)
+        max_y = max(sy, gy, max(o['y2'] for o in travel_obstacles) + self.resolution)
 
         nx = int(math.ceil((max_x - min_x) / self.resolution)) + 1
         ny = int(math.ceil((max_y - min_y) / self.resolution)) + 1
@@ -129,7 +135,7 @@ class AStarPlanner:
         if nx * ny > 200000:
             raise RuntimeError("Planning grid too large; increase resolution or reduce obstacle extents")
 
-        blocked = self._build_occupancy(min_x, min_y, nx, ny, obstacles)
+        blocked = self._build_occupancy(min_x, min_y, nx, ny, travel_obstacles)
 
         start_idx = self._xy_to_idx(sx, sy, min_x, min_y)
         goal_idx = self._xy_to_idx(gx, gy, min_x, min_y)
