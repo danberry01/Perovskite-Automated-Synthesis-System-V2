@@ -178,6 +178,11 @@ class AStarPlanner:
                     continue
                 if neighbor in blocked:
                     continue
+                if dx != 0 and dy != 0:
+                    side_a = (current[0] + dx, current[1])
+                    side_b = (current[0], current[1] + dy)
+                    if side_a in blocked or side_b in blocked:
+                        continue
                 tentative_g = current_g + heuristic(current, neighbor)
                 if neighbor not in gscore or tentative_g < gscore[neighbor]:
                     gscore[neighbor] = tentative_g

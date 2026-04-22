@@ -295,7 +295,19 @@ class MoveRegistry():
 
     def _load_persistent_obstacles(self):
         pf = ProcedureFile()
-        return pf.Open('persistant/obstacles.yml') or pf.Open('persistant/obstacles') or []
+        obstacle_paths = [
+            'persistant/obstacles.yml',
+            'persistant/obstacles',
+            os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'persistant', 'obstacles.yml')),
+            os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'persistant', 'obstacles')),
+        ]
+
+        for obstacle_path in obstacle_paths:
+            obstacles = pf.Open(obstacle_path)
+            if obstacles:
+                return obstacles
+
+        return []
 
     def _get_obstacle_bounds(self, entry):
         if isinstance(entry, dict):
@@ -332,6 +344,21 @@ class MoveRegistry():
                 and ob['zmin'] <= target_z <= ob['zmax']
             ):
                 return ob['name'] or 'unnamed obstacle'
+        return None
+
+    def _xy_segment_hits_obstacle(self, start_x: float, start_y: float, end_x: float, end_y: float, travel_z: float, obstacles, sample_step_mm: float = 2.0):
+        dx = float(end_x) - float(start_x)
+        dy = float(end_y) - float(start_y)
+        segment_length = max(abs(dx), abs(dy))
+        samples = max(1, int(segment_length / max(float(sample_step_mm), 0.5)))
+
+        for sample_index in range(samples + 1):
+            t = sample_index / samples
+            sample_x = float(start_x) + (dx * t)
+            sample_y = float(start_y) + (dy * t)
+            hit_obstacle = self._target_obstacle_hit(sample_x, sample_y, travel_z, obstacles)
+            if hit_obstacle is not None:
+                return hit_obstacle
         return None
 
     def _clamp_z_to_obstacles(self, target_x: float, target_y: float, requested_z: float, z_clearance_mm: float = 0.0) -> float:
@@ -423,9 +450,13 @@ class MoveRegistry():
         try:
             path = planner.plan((cx, cy, cz), (tx, ty, tz), raw_obstacles=obstacles)
         except Exception as e:
-            # planning failed; log and fall back to direct motion
-            self.logger.debug(f"soft_limit_axis_move: planning failed: {e}")
+            if obstacles:
+                raise RuntimeError(f"soft_limit_axis_move: path planning failed with obstacles present: {e}")
+            self.logger.debug(f"soft_limit_axis_move: planning failed without obstacles: {e}")
             path = None
+
+        if obstacles and (not path or len(path) < 2):
+            raise RuntimeError("soft_limit_axis_move: no collision-free path found; move blocked")
 
         # Move to safe Z before XY travel
         SAFE_Z = 200
@@ -440,11 +471,20 @@ class MoveRegistry():
         try:
             if path and len(path) >= 2:
                 # path contains start and goal; skip first (current)
+                previous_x = cx
+                previous_y = cy
                 for px, py in path[1:]:
-                    self.toolhead.move_to(x=px, y=py, relative=False, feedrate=800)
+                    hit_obstacle = self._xy_segment_hits_obstacle(previous_x, previous_y, px, py, SAFE_Z, obstacles)
+                    if hit_obstacle is not None:
+                        raise RuntimeError(
+                            f"soft_limit_axis_move: planned XY segment intersects obstacle '{hit_obstacle}'; move blocked"
+                        )
+                    self.toolhead.move_to(x=px, y=py, relative=False, feedrate=800, coordinated=True)
+                    previous_x = px
+                    previous_y = py
             else:
-                # No obstacles or planning failed: direct XY move
-                self.logger.info("soft_limit_axis_move: no plan found, performing direct XY move")
+                # No obstacles: direct XY move
+                self.logger.info("soft_limit_axis_move: no obstacles loaded, performing direct XY move")
                 self.toolhead.move_to(x=tx, y=ty, relative=False, feedrate=1000)
         except Exception as e:
             self.logger.exception(f"soft_limit_axis_move: XY movement failed: {e}")
