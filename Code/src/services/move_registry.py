@@ -297,6 +297,43 @@ class MoveRegistry():
         pf = ProcedureFile()
         return pf.Open('persistant/obstacles.yml') or pf.Open('persistant/obstacles') or []
 
+    def _get_obstacle_bounds(self, entry):
+        if isinstance(entry, dict):
+            name = str(entry.get('name') or '')
+            x1 = float(entry.get('x1', 0)); y1 = float(entry.get('y1', 0)); z1 = float(entry.get('z1', 0))
+            x2 = float(entry.get('x2', x1)); y2 = float(entry.get('y2', y1)); z2 = float(entry.get('z2', z1))
+        elif isinstance(entry, (list, tuple)) and len(entry) >= 7:
+            name = str(entry[0])
+            x1 = float(entry[1]); y1 = float(entry[2]); z1 = float(entry[3])
+            x2 = float(entry[4]); y2 = float(entry[5]); z2 = float(entry[6])
+        else:
+            raise ValueError("Unsupported obstacle format")
+
+        return {
+            'name': name,
+            'xmin': min(x1, x2),
+            'xmax': max(x1, x2),
+            'ymin': min(y1, y2),
+            'ymax': max(y1, y2),
+            'zmin': min(z1, z2),
+            'zmax': max(z1, z2),
+        }
+
+    def _target_obstacle_hit(self, target_x: float, target_y: float, target_z: float, obstacles):
+        for entry in obstacles or []:
+            try:
+                ob = self._get_obstacle_bounds(entry)
+            except Exception:
+                continue
+
+            if (
+                ob['xmin'] <= target_x <= ob['xmax']
+                and ob['ymin'] <= target_y <= ob['ymax']
+                and ob['zmin'] <= target_z <= ob['zmax']
+            ):
+                return ob['name'] or 'unnamed obstacle'
+        return None
+
     def _clamp_z_to_obstacles(self, target_x: float, target_y: float, requested_z: float, z_clearance_mm: float = 0.0) -> float:
         """Clamp requested Z so destination does not descend into an obstacle volume."""
         min_allowed_z = None
@@ -367,15 +404,19 @@ class MoveRegistry():
                 tx = float(x)
                 ty = float(y)
                 tz = float(z)
-
-            # Never descend into obstacle volumes at destination XY.
-            tz = self._clamp_z_to_obstacles(tx, ty, tz)
         except Exception as e:
             raise ValueError(f"Invalid target coordinates: {e}")
 
         # load obstacles
-        pf = ProcedureFile()
-        obstacles = pf.Open('persistant/obstacles.yml') or pf.Open('persistant/obstacles')
+        obstacles = self._load_persistent_obstacles()
+
+        # Do not start any movement if the requested target point is inside
+        # or exactly on obstacle boundaries.
+        hit_obstacle = self._target_obstacle_hit(tx, ty, tz, obstacles)
+        if hit_obstacle is not None:
+            raise ValueError(
+                f"soft_limit_axis_move target ({tx}, {ty}, {tz}) intersects obstacle '{hit_obstacle}'. Move blocked."
+            )
 
         planner = AStarPlanner()
         path = None
