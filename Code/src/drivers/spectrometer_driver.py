@@ -15,7 +15,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import logging
 import time
-from data_processor import plot_spectra, save_all_to_csv  
+from services.data_processor import plot_spectra, save_all_to_csv  
 
 
 # debugging
@@ -35,14 +35,19 @@ class Spectrometer:
 
     def connect(self):
         """Establish connection to the spectrometer"""
-        
-        
+        if self.is_connected():
+            self.logger.debug("Spectrometer already connected")
+            return True
+
         port = "/dev/spectrometer"
         try:
             self.serial = serial.Serial(port, baudrate=115200, timeout=5)  
             self.logger.info(f"Connected to spectrometer on {port}")
+            return True
         except serial.SerialException as e:
-            self.logger.error(f"Error connecting to spectrometer: {e}")
+            self.logger.warning(f"Spectrometer not connected on {port}: {e}")
+            self.serial = None
+            return False
 
     def disconnect(self):
         """Close the serial connection"""

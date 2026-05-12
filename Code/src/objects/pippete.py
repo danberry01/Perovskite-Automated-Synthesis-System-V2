@@ -21,7 +21,7 @@ class Pipette:
 class PipetteHandler():
     ACTUATOR_MAX_HEIGHT_MM: int
     STAND_0_Y: float = 85
-    STAND_1_Y: float = 151
+    STAND_1_Y: float = 190
     def __init__(self, control_board: ControlBoard, tip_eject_servo: AngularServo, grabber_servo: AngularServo, pipettes: list):
         self.logger = logging.getLogger("Main Logger")
         
@@ -51,7 +51,11 @@ class PipetteHandler():
             return None
         
     def home(self):
-        self.control_board.send_message("G28 B")
+        self.control_board.send_message("G28 B", require_lock=True)
+        try:
+            self.control_board.finish_moves()
+        except Exception:
+            pass
         
     def set_actuator_position(self, position_mm):
         
@@ -101,8 +105,14 @@ class PipetteHandler():
         self.grabber_servo.angle = 80
         
     def detatch_servos(self):
-        self.tip_eject_servo.detach()
-        self.tip_eject_servo.detach()
+        try:
+            self.tip_eject_servo.detach()
+        except Exception:
+            pass
+        try:
+            self.grabber_servo.detach()
+        except Exception:
+            pass
         
         
         

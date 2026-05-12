@@ -1,0 +1,14 @@
+# I never got this working :( 
+
+smtp:
+  host: localhost
+  port: 25
+  username: ""
+  password: ""
+  use_tls: false
+
+from: pass@localhost
+
+recipients:
+  - dcounte1@binghamton.edu
+  
