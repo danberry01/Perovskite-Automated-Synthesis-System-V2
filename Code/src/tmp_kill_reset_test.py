@@ -50,7 +50,7 @@ fake_serial.Serial = fake_serial_Serial
 sys.modules['serial'] = fake_serial
 sys.modules['serial.threaded'] = fake_threaded
 
-# Provide a minimal gpiozero shim to avoid hardware dependencies
+# This creates a fake gpiozero instance with a class for the servos that would make the system crash otherwise
 fake_gpiozero = types.ModuleType('gpiozero')
 class AngularServo:
     def __init__(self, *args, **kwargs):
@@ -60,7 +60,7 @@ class AngularServo:
 fake_gpiozero.AngularServo = AngularServo
 sys.modules['gpiozero'] = fake_gpiozero
 
-# Provide a minimal cv2 shim (aruco detector used by ImageProcessor)
+# Provide a minimal recreation of cv2 so it doesnt need to be installed for tests
 fake_cv2 = types.ModuleType('cv2')
 fake_aruco = types.ModuleType('cv2.aruco')
 def getPredefinedDictionary(x):
@@ -80,6 +80,7 @@ sys.modules['cv2.aruco'] = fake_aruco
 
 from services.move_registry import MoveRegistry
 
+# This tests things that are present in the normal system while not connected to them via hardware.
 class FakeControlBoard:
     def __init__(self):
         self.received_ok = threading.Event()

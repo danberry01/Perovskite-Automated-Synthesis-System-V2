@@ -4,13 +4,8 @@ import logging
 
 
 class SplashFrame(ctk.CTkFrame):
-    """Startup splash that asks the user whether to home the gantry.
-
-    This frame attempts a best-effort auto-connect to the control board
-    in the background and displays a simple status. If the user selects
-    Yes the UI switches to the procedure viewer and the gantry homing is
-    started in a background thread. If No, the UI switches to the
-    file manager (home) tab.
+    """Startup splash that asks the user whether to home the gantry, or just go to the rest of the system.
+        Needs updating. 
     """
 
     def __init__(self, master, dispatcher, move_registry, controller, **kwargs):
@@ -24,10 +19,10 @@ class SplashFrame(ctk.CTkFrame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
-        title = ctk.CTkLabel(self, text="Welcome to Perovskite ASS V2", font=("Arial", 22, "bold"))
+        title = ctk.CTkLabel(self, text="Welcome to Perovskite Automated Synthesis System V2", font=("Arial", 22, "bold"))
         title.pack(pady=(40, 8))
 
-        prompt = ctk.CTkLabel(self, text="Home the gantry now?", font=("Arial", 16))
+        prompt = ctk.CTkLabel(self, text="Home the gantry now?", font=("Arial", 16,),text_color="#CCCCCC")
         prompt.pack(pady=(0, 10))
 
         self.status_label = ctk.CTkLabel(self, text="Attempting to auto-connect to hardware...", text_color="#CCCCCC")
@@ -41,7 +36,7 @@ class SplashFrame(ctk.CTkFrame):
         no_btn = ctk.CTkButton(btn_frame, text="No", width=120, command=self._on_no)
         no_btn.grid(row=0, column=1, padx=8)
 
-        # Start background auto-connect attempt
+        # Runs a connection on the threading class
         threading.Thread(target=self._attempt_auto_connect, daemon=True).start()
 
     def _attempt_auto_connect(self):

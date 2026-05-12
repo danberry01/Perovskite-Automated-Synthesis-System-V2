@@ -118,20 +118,28 @@ class TabManagerFrame(ctk.CTkFrame):
         # self.frame_exclusive_color_bindings(self.file_tab_button, self.procedure_tab_button, self.builder_tab_button)
 
     def hide_overlapping_frames(self, disp_frame = None, hide_frame = None, event=None):
+        if disp_frame is None or hide_frame is None:
+            return
 
-        self.update_idletasks()
+        try:
+            if not self.winfo_exists() or not disp_frame.winfo_exists() or not hide_frame.winfo_exists():
+                return
 
-        required_height = (
-            disp_frame.winfo_reqheight() +
-            hide_frame.winfo_reqheight() +
-            210 # This number determines how far from the top the frame "collision" is detected. Higher number = sooner collision
-        )
+            self.update_idletasks()
 
-        if self.winfo_height() < required_height:
-            hide_frame.grid_remove()
-        else:
-            if not hide_frame.winfo_ismapped():
-                hide_frame.grid()
+            required_height = (
+                disp_frame.winfo_reqheight() +
+                hide_frame.winfo_reqheight() +
+                210 # This number determines how far from the top the frame "collision" is detected. Higher number = sooner collision
+            )
+
+            if self.winfo_height() < required_height:
+                hide_frame.grid_remove()
+            else:
+                if not hide_frame.winfo_ismapped():
+                    hide_frame.grid()
+        except Exception:
+            return
     
     def path_to_ctk_image(self, image_path):
         if image_path is None:

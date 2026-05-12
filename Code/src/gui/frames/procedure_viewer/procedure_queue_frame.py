@@ -5,7 +5,6 @@ from tkinter import filedialog
 import sys
 import os
 
-from services.procedure_handler import ProcedureHandler
 from ...components.constants import *
 
 # import procedure file driver
@@ -243,9 +242,9 @@ class ProcedureQueueFrame(ctk.CTkFrame):
         """Load the default procedure from disk at startup."""
         # Try multiple paths to find the default procedure
         possible_paths = [
+            os.path.join("procedures", "default_procedure.yml"),
             os.path.join("src", "procedures", "default_procedure.yml"),
-            os.path.join("..", "..", "procedures", "default_procedure.yml"),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "procedures", "default_procedure.yml"))
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "procedures", "default_procedure.yml"))
         ]
         
         for path in possible_paths:

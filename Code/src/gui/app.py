@@ -12,12 +12,13 @@ ctk.set_default_color_theme("green")
 
 class App(ctk.CTk):
     """Application for Perovskite Automated Synthesis System"""
-    def __init__(self, move_registry, dispatcher, procedure_handler):
+    def __init__(self, move_registry, dispatcher, procedure_handler, show_splash=True):
         super().__init__(fg_color = FOREGROUND_COLOR)
 
         self.move_registry = move_registry
         self.dispatcher = dispatcher
         self.procedure_handler = procedure_handler
+        self.show_splash = show_splash
 
         # # If run from main, takes the file path 
         # self.current_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,10 +41,8 @@ class App(ctk.CTk):
         )
         self.tab_manager_frame.grid(row = 0, column = 0, rowspan = 2, padx = 0, pady = 0, sticky = "nsew")
         
-        # Use a vertical PanedWindow so the user can drag the boundary between
-        # the main tab view and the info/console area. The PanedWindow spans
-        # the same grid area previously occupied by tab_view_frame + info_frame.
         self._right_pane = tk.PanedWindow(self, orient=tk.VERTICAL)
+
         self._right_pane.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=0, pady=0)
 
         self.tab_view_frame = TabViewFrame(
@@ -62,56 +61,53 @@ class App(ctk.CTk):
         )
         self._right_pane.add(self.info_frame)
 
-        # Ensure application performs driver cleanup on window close
+        # Ensures the application performs driver cleanup on the  window close 
         try:
             self.protocol("WM_DELETE_WINDOW", self._on_closing)
         except Exception:
-            # protocol may not be available in some environments; ignore if so
+
             pass
 
-        # Show splashscreen on startup (covers the UI). The splash
-        # attempts a background auto-connect and prompts to home.
-        try:
-            self.splash = SplashFrame(master=self, dispatcher=self.dispatcher, move_registry=self.move_registry, controller=self)
-            # place to cover entire window and bring to front
-            self.splash.place(relx=0, rely=0, relwidth=1, relheight=1)
+        # Shows a splashscreen on startup when running with the full hardware stack. The text color needs to be changed eventually
+        if self.show_splash:
             try:
-                self.splash.lift()
+                self.splash = SplashFrame(master=self, dispatcher=self.dispatcher, move_registry=self.move_registry, controller=self)
+                # place to cover entire window and bring to front
+                self.splash.place(relx=0, rely=0, relwidth=1, relheight=1)
+                try:
+                    self.splash.lift()
+                except Exception:
+                    pass
             except Exception:
-                pass
-        except Exception:
-            logging.getLogger("Main Logger").exception("Failed to create splash frame")
+                logging.getLogger("Main Logger").exception("Failed to create splash frame")
 
     def _on_closing(self):
-        """Run cleanup in a background thread so the GUI can close immediately.
-
-        Heavy or potentially blocking hardware operations (serial writes,
-        disconnects) are executed in a daemon thread to avoid freezing the
-        main thread when the user clicks the window close (X) button.
-        """
+   
         logger = logging.getLogger("Main Logger")
         logger.info("Application closing — scheduling cleanup")
 
         def _cleanup():
             logger.info("Background cleanup started")
-            # Stop any running procedure and issue emergency stop
+
             try:
                 if self.procedure_handler:
                     self.procedure_handler.kill()
             except Exception:
                 logger.exception("Error while killing procedure handler during shutdown")
 
-            # Ensure hardware is commanded to a safe state
+
+
             try:
                 if self.move_registry:
                     self.move_registry.kill()
             except Exception:
                 logger.exception("Error while invoking move_registry.kill() during shutdown")
 
-            # Give hardware a short moment to process stop commands
+
             sleep(0.2)
 
-            # Disconnect hardware drivers where possible
+
+
             try:
                 drivers = [
                     'control_board', 'spin_coater', 'camera', 'spectrometer', 'hotplate', 'vial_carousel'
@@ -133,7 +129,6 @@ class App(ctk.CTk):
 
             logger.info("Background cleanup finished")
 
-        # Run cleanup in background and close GUI immediately
         try:
             import threading as _threading
             t = _threading.Thread(target=_cleanup, daemon=True)
@@ -147,6 +142,7 @@ class App(ctk.CTk):
             pass
 
     def switch_tab(self, tab_name):
+        
         self.tab_manager_frame.current_tab = tab_name
         self.tab_view_frame.goto_tab(tab_name)     
 

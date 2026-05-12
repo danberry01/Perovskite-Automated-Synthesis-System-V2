@@ -129,6 +129,17 @@ class ConnectionFrame(ctk.CTkFrame):
         except Exception:
             logging.getLogger("Main Logger").exception("Failed to start auto-connect thread for ConnectionFrame")
 
+    def _call_ui(self, callback, *args, **kwargs):
+        try:
+            if not self.winfo_exists():
+                return
+            self.after(0, lambda: callback(*args, **kwargs) if self.winfo_exists() else None)
+        except Exception:
+            pass
+
+    def _set_connection_status_safe(self, widget, connected: bool):
+        self._call_ui(widget.set_connection_status, connected)
+
     def _auto_connect_on_startup(self):
         """Attempt to connect to available devices on startup in background.
 
@@ -143,7 +154,7 @@ class ConnectionFrame(ctk.CTkFrame):
                     self.control_board.connect()
             except Exception as e:
                 logger.debug(f"Control board auto-connect attempt raised: {e}")
-            self.control_board_connection.set_connection_status(self.control_board.is_connected())
+            self._set_connection_status_safe(self.control_board_connection, self.control_board.is_connected())
 
             # Try the spin coater
             try:
@@ -151,7 +162,7 @@ class ConnectionFrame(ctk.CTkFrame):
                     self.spin_coater.connect()
             except Exception as e:
                 logger.debug(f"Spin coater auto-connect attempt raised: {e}")
-            self.spin_coater_connection.set_connection_status(self.spin_coater.is_connected())
+            self._set_connection_status_safe(self.spin_coater_connection, self.spin_coater.is_connected())
 
             # Try hotplate
             try:
@@ -159,7 +170,7 @@ class ConnectionFrame(ctk.CTkFrame):
                     self.hotplate.connect()
             except Exception as e:
                 logger.debug(f"Hotplate auto-connect attempt raised: {e}")
-            self.hotplate_connection.set_connection_status(self.hotplate.is_connected())
+            self._set_connection_status_safe(self.hotplate_connection, self.hotplate.is_connected())
 
             # Try spectrometer
             try:
@@ -167,7 +178,7 @@ class ConnectionFrame(ctk.CTkFrame):
                     self.spectrometer.connect()
             except Exception as e:
                 logger.debug(f"Spectrometer auto-connect attempt raised: {e}")
-            self.spectrometer_connection.set_connection_status(self.spectrometer.is_connected())
+            self._set_connection_status_safe(self.spectrometer_connection, self.spectrometer.is_connected())
 
             # Try camera via dispatcher helper
             try:
@@ -175,7 +186,7 @@ class ConnectionFrame(ctk.CTkFrame):
                     self.dispatcher.connect_camera()
             except Exception as e:
                 logger.debug(f"Camera auto-connect attempt raised: {e}")
-            self.camera_connection.set_connection_status(self.camera.is_connected())
+            self._set_connection_status_safe(self.camera_connection, self.camera.is_connected())
 
         except Exception:
             logger.exception("Error during auto-connect startup sequence")
@@ -196,7 +207,7 @@ class ConnectionFrame(ctk.CTkFrame):
             try:
                 self.control_board.connect()
                 ok = self.control_board.is_connected()
-                self.control_board_connection.set_connection_status(ok)
+                self._set_connection_status_safe(self.control_board_connection, ok)
                 if not ok:
                     logger.warning("Control board auto-connect reported not connected")
             except Exception as e:
@@ -205,7 +216,7 @@ class ConnectionFrame(ctk.CTkFrame):
                     self.control_board.disconnect()
                 except Exception:
                     pass
-                self.control_board_connection.set_connection_status(False)
+                self._set_connection_status_safe(self.control_board_connection, False)
 
         threading.Thread(target=_task, daemon=True).start()
     
@@ -214,14 +225,14 @@ class ConnectionFrame(ctk.CTkFrame):
             logger = logging.getLogger("Main Logger")
             try:
                 self.spin_coater.connect()
-                self.spin_coater_connection.set_connection_status(self.spin_coater.is_connected())
+                self._set_connection_status_safe(self.spin_coater_connection, self.spin_coater.is_connected())
             except Exception as e:
                 logger.exception(f"Error connecting spin coater: {e}")
                 try:
                     self.spin_coater.disconnect()
                 except Exception:
                     pass
-                self.spin_coater_connection.set_connection_status(False)
+                self._set_connection_status_safe(self.spin_coater_connection, False)
 
         threading.Thread(target=_task, daemon=True).start()
         
@@ -230,14 +241,14 @@ class ConnectionFrame(ctk.CTkFrame):
             logger = logging.getLogger("Main Logger")
             try:
                 self.hotplate.connect()
-                self.hotplate_connection.set_connection_status(self.hotplate.is_connected())
+                self._set_connection_status_safe(self.hotplate_connection, self.hotplate.is_connected())
             except Exception as e:
                 logger.exception(f"Error connecting hotplate: {e}")
                 try:
                     self.hotplate.disconnect()
                 except Exception:
                     pass
-                self.hotplate_connection.set_connection_status(False)
+                self._set_connection_status_safe(self.hotplate_connection, False)
 
         threading.Thread(target=_task, daemon=True).start()
         
@@ -246,14 +257,14 @@ class ConnectionFrame(ctk.CTkFrame):
             logger = logging.getLogger("Main Logger")
             try:
                 self.spectrometer.connect()
-                self.spectrometer_connection.set_connection_status(self.spectrometer.is_connected())
+                self._set_connection_status_safe(self.spectrometer_connection, self.spectrometer.is_connected())
             except Exception as e:
                 logger.exception(f"Error connecting spectrometer: {e}")
                 try:
                     self.spectrometer.disconnect()
                 except Exception:
                     pass
-                self.spectrometer_connection.set_connection_status(False)
+                self._set_connection_status_safe(self.spectrometer_connection, False)
 
         threading.Thread(target=_task, daemon=True).start()
         
@@ -274,7 +285,7 @@ class ConnectionFrame(ctk.CTkFrame):
         
     def _on_camera_connection_changed(self, is_connected: bool):
         """Callback when camera connection state changes (called from either button)"""
-        self.camera_connection.set_connection_status(is_connected)
+        self._set_connection_status_safe(self.camera_connection, is_connected)
         
     def _set_command_destination(self, value: str):
         self.command_destination = value

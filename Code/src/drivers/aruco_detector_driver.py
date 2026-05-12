@@ -1,10 +1,3 @@
-"""
-ArUco Marker Detection Driver
-
-This module handles all ArUco marker detection and pose estimation logic.
-It encapsulates the computer vision operations for detecting markers and
-calculating their 3D positions relative to the camera.
-"""
 
 import cv2
 import cv2.aruco as aruco
@@ -14,17 +7,7 @@ import os
 
 
 class ArucoDetector:
-    """
-    Handles ArUco marker detection and 3D pose estimation.
-    
-    This driver manages:
-    - Camera calibration data loading
-    - ArUco marker dictionary and detector setup
-    - Frame processing for marker detection
-    - 3D pose estimation for detected markers
-    - Result formatting and logging
-    """
-    
+
     def __init__(
         self, 
         calibration_file: str = "gui/components/calibration_data.npz",
@@ -33,16 +16,7 @@ class ArucoDetector:
         frame_width: int = 600,
         frame_height: int = 400
     ):
-        """
-        Initialize the ArUco detector.
-        
-        Args:
-            calibration_file: Path to calibration NPZ file with camera matrix and distortion
-            marker_length: Physical size of markers in meters (default 50mm)
-            dictionary: ArUco dictionary to use (default DICT_4X4_50)
-            frame_width: Camera frame width in pixels
-            frame_height: Camera frame height in pixels
-        """
+
         self.logger = logging.getLogger("Main Logger")
         
         self.marker_length = marker_length
@@ -60,21 +34,10 @@ class ArucoDetector:
         self.logger.debug(f"ArucoDetector initialized with {marker_length}m markers")
     
     def _load_calibration(self, calibration_file: str):
-        """
-        Load camera calibration data from NPZ file.
-        
-        Args:
-            calibration_file: Path to NPZ file containing 'camera_matrix' and 'dist_coeffs'
-            
-        Returns:
-            Tuple of (camera_matrix, dist_coeffs)
-            
-        Raises:
-            FileNotFoundError: If calibration file doesn't exist
-            KeyError: If required keys not found in NPZ
-        """
+
         try:
             if not os.path.exists(calibration_file):
+
                 raise FileNotFoundError(f"Calibration file not found: {calibration_file}")
             
             data = np.load(calibration_file)
@@ -89,20 +52,8 @@ class ArucoDetector:
             raise
     
     def detect_markers(self, frame: np.ndarray):
-        """
-        Detect ArUco markers in a frame and estimate their 3D poses.
-        
-        Args:
-            frame: Input frame from camera (BGR format)
-            
-        Returns:
-            Dictionary with keys:
-            - 'frame': Annotated frame with markers drawn
-            - 'markers': List of detected markers with pose info
-                Each marker contains: id, corners, position (x, y, z), rotation_vector
-            - 'count': Number of markers detected
-        """
-        # Convert to grayscale
+
+        # Converts the picture to grayscale
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
         # Scale down for faster detection
@@ -125,7 +76,7 @@ class ArucoDetector:
             for i in range(len(corners)):
                 corners[i] = corners[i] / scale_percent
             
-            # Estimate 3D pose for each marker
+            # Estimates 3D pose for each marker
             rotation_vectors, translation_vectors, _ = cv2.aruco.estimatePoseSingleMarkers(
                 corners,
                 self.marker_length,
@@ -133,19 +84,20 @@ class ArucoDetector:
                 self.dist_coeffs
             )
             
-            # Process each detected marker
+            # Processes each detected marker
             for i in range(len(ids)):
+
                 marker_id = ids[i][0]
                 corner = corners[i].astype(int)
                 rot_vec = rotation_vectors[i]
                 trans_vec = translation_vectors[i]
                 
-                # Extract position
+                # Extract the position
                 x = trans_vec[0][0]
                 y = trans_vec[0][1]
                 z = trans_vec[0][2]
                 
-                # Draw on frame
+                # This actually makes the visual part you see
                 self._draw_marker_visualization(
                     result_frame, corner, rot_vec, trans_vec, marker_id, i
                 )
@@ -174,17 +126,7 @@ class ArucoDetector:
         marker_id: int, 
         index: int
     ):
-        """
-        Draw marker visualization on frame (border, axis, ID, coordinates).
-        
-        Args:
-            frame: Frame to draw on (modified in-place)
-            corners: Marker corner points
-            rot_vec: Rotation vector
-            trans_vec: Translation vector
-            marker_id: Marker ID
-            index: Marker index (for text positioning)
-        """
+
         # Draw marker border
         cv2.polylines(frame, [corners], True, (0, 255, 0), 2)
         
@@ -203,8 +145,9 @@ class ArucoDetector:
         y = trans_vec[0][1]
         z = trans_vec[0][2]
         
-        # Draw ID text
+        # Draws text ID. seperating the blocks is just for visual organization, no real reason to do it this way.
         cv2.putText(
+
             frame,
             f"ID: {marker_id}",
             org=(10, 40 + index * 60),
@@ -216,6 +159,7 @@ class ArucoDetector:
         
         # Draw position text
         cv2.putText(
+
             frame,
             f"X: {x:.3f}m  Y: {y:.3f}m  Z: {z:.3f}m",
             org=(10, 65 + index * 60),
@@ -223,37 +167,27 @@ class ArucoDetector:
             fontScale=0.7,
             color=(0, 255, 0),  # Green (BGR)
             thickness=2
+
         )
     
     def get_marker_positions(self, markers: list) -> dict:
-        """
-        Get a simple dictionary mapping marker IDs to their 3D positions.
-        
-        Args:
-            markers: List of marker dicts from detect_markers()
-            
-        Returns:
-            Dictionary with marker IDs as keys and position dicts as values
-        """
+
         positions = {}
         for marker in markers:
             positions[int(marker['id'])] = marker['position']
         return positions
     
+
     def log_detection_results(self, result: dict):
-        """
-        Log marker detection results to logger at CAMERA level.
-        Uses a custom CAMERA level to keep verbose camera updates out of normal logging.
-        
-        Args:
-            result: Result dict from detect_markers()
-        """
+
         # CAMERA level is DEBUG - 1 (defined in main.py)
         CAMERA_LEVEL = logging.DEBUG - 1
         
+
         if result['count'] == 0:
             self.logger.log(CAMERA_LEVEL, "No markers detected")
         else:
+            
             self.logger.log(CAMERA_LEVEL, f"Detected {result['count']} marker(s)")
             for marker in result['markers']:
                 pos = marker['position']

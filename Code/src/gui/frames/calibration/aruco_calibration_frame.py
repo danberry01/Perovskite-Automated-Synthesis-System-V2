@@ -30,16 +30,6 @@ class CalibrationAborted(RuntimeError):
 
 
 class ArucoCalibrationFrame(ctk.CTkFrame):
-    """Frame for calibrating ArUco marker positions.
-
-    Coordinate system separation:
-    - `relative_position`: marker position in the camera frame (meters)
-    - `gantry_position`: physical gantry coordinates (mm) — never overridden by calibration
-    - `abs_aruco_position`: computed gantry coordinates (mm) where the ARuCo marker is located
-
-    `abs_aruco_position` is stored for reference only and is never used as
-    a command target for motion. Motion is always driven by `gantry_position`.
-    """
     
     def __init__(self, master, dispatcher, **kwargs):
         super().__init__(master, fg_color=FOREGROUND_COLOR, corner_radius=0)
@@ -53,17 +43,15 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         except Exception:
             self.logger.exception("Failed to register calibration emergency-stop callback")
         
-        # Use shared ArUco detector and Camera driver from dispatcher
         self.aruco_detector = dispatcher.aruco_detector
+
         self.camera = dispatcher.camera
         self.width = dispatcher.camera_width
         self.height = dispatcher.camera_height
         
-        # Shared frame buffer (updated by UI thread) for safe access from
-        # the background calibration worker to avoid multiple threads
-        # reading from the same VideoCapture instance concurrently.
         self._last_frame = None
         self._frame_lock = threading.Lock()
+
         # Calibration data storage
         self.calibration_data: Dict[int, Dict] = {}  # saved/permanent calibrations
         self.pending_calibrations: Dict[int, Dict] = {}  # newly scanned calibrations not yet saved
@@ -101,27 +89,21 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
     
     
     def _update_camera_display(self):
-        """Update the camera display with the latest frame from shared video capture"""
+        """Updates the camera display with the most reeecnt frame from shared video capture"""
         if self._is_paused:
             self._video_feed_after_id = self.camera_display.after(20, self._update_camera_display)
             return
         
-        # Read frame from shared Camera driver
+        # Reads frame from shared Camera driver
         frame = self.camera.get_frame()
         if frame is None:
             self._video_feed_after_id = self.camera_display.after(10, self._update_camera_display)
             return
         
-        # Process frame with shared ArUco detector
+        # Processes frame with shared ArUco detector
         result = self.aruco_detector.detect_markers(frame)
         frame = result['frame']
         
-        # Log detection results
-        # if result['count'] > 0:
-        #     self.logger.debug(f"Detected {result['count']} markers")
-        
-        # Store a copy of the raw frame for the worker to use (avoid
-        # concurrent reads from the VideoCapture). Use a lock for safety.
         try:
             with self._frame_lock:
                 self._last_frame = frame.copy()
@@ -142,7 +124,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         self.camera_display.configure(image=ctk_image)
         self.camera_display.image = ctk_image
         
-        # Schedule next update
+        # Schedules next update
         self._video_feed_after_id = self.camera_display.after(20, self._update_camera_display)
     
     def _start_camera_display(self):
@@ -179,13 +161,14 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
             self._video_feed_after_id = None
     
     def pause_updates(self):
-        """Pause camera display when frame is hidden"""
+        """Pause camera display if the frame is hidden"""
         self._stop_camera_display()
     
     def resume_updates(self):
-        """Resume camera display when frame becomes visible"""
+        """Resumes camera display when frame becomes visible"""
         self._start_camera_display()
 
+    # Error handling
     def _is_emergency_stop_active(self) -> bool:
         try:
             return bool(self.control_board.is_killed())
@@ -234,8 +217,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
         import time
 
         try:
-            # Worker reads frames from the UI-updated `_last_frame` buffer to
-            # avoid multiple threads reading from the same VideoCapture.
+    
             while not self._should_abort():
                 self._abort_if_requested()
                 self._call_ui(self._update_status, "Scanning for markers...")
@@ -243,8 +225,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                 start_time = time.time()
                 detected_markers = {}
 
-                # Increase the initial scan window to give the camera time to
-                # present stable frames. We sample the latest UI-updated frame.
+               
                 scan_window = 4.0
                 min_detections_per_marker = 3
                 span_threshold_m = 0.01  # 10 mm spread allowed across detections
@@ -284,6 +265,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                     if len(positions) < min_detections_per_marker:
                         self.logger.debug(f"Marker {marker_id} seen only {len(positions)} times; skipping")
                         continue
+
                     xs = [p['x'] for p in positions]
                     ys = [p['y'] for p in positions]
                     zs = [p['z'] for p in positions]
@@ -364,8 +346,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             time.sleep(0.3)
                             continue
 
-                        # Longer settle to allow mechanical vibration to die out
-                        # Wait for a fresh frame after motion
+                        # Letting it settle longer makes it more reliable
                         self._abort_if_requested()
                         last_frame_id = id(self._last_frame)
 
@@ -377,8 +358,7 @@ class ArucoCalibrationFrame(ctk.CTkFrame):
                             time.sleep(0.01)
                         self._abort_if_requested()
 
-                        # Now scan briefly for the marker at the moved position using
-                        # the UI-updated frame buffer (avoid direct VideoCapture reads).
+
                         scan_start = time.time()
                         detections = []
                         scan_timeout = 5.0

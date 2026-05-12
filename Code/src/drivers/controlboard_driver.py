@@ -12,7 +12,6 @@ import serial.threaded
 
 
 class ControlBoard():
-    """Class to control the Octopus v1.1 control board"""
 
     def __init__(self):
 
@@ -158,10 +157,6 @@ class ControlBoard():
     
     def kill(self):
         """Send emergency stop to the control board and unblock waits.
-
-        This sets an internal kill event, sends the firmware emergency stop
-        (`M112`) and ensures any threads waiting for move completion are
-        unblocked.
         """
         self.logger.error("Emergency stop requested on control board")
         # Mark kill so other methods can abort early
@@ -186,10 +181,7 @@ class ControlBoard():
             pass
 
     def request_position(self, wait: bool = False, timeout: float = 1.0):
-        """Request the control board to report its current position (M114).
-
-        The board's reader thread will pick up the response and update
-        `self.positions`.
+        """Requests the current position of the baord
         """
         if not self.is_connected():
             if wait:
@@ -222,7 +214,8 @@ class ControlBoard():
         raise TimeoutError("Timed out waiting for position response")
 
     def enable_raw_logging(self, file_path: str):
-        """Enable appending raw incoming serial lines to `file_path` for debugging."""
+        """Enable appending raw incoming serial lines to `file_path` for debugging.
+        """
         try:
             # Line-buffered so logs appear promptly
             self._raw_log_handle = open(file_path, "a", buffering=1, encoding="utf-8")
@@ -256,7 +249,7 @@ class ControlBoard():
             return self.positions.get(axis)
 
     def _update_positions_from_line(self, line: str):
-        """Parse a status line containing X:,Y:,Z: etc and update positions."""
+        """Parses the status line containing X:,Y:,Z: etc and updates the  positions."""
         try:
             # Expect lines like: 'X:0.00 Y:0.00 Z:0.00 A:0.00 B:0.00'
             # Use regex to tolerate optional spaces after the colon and different formatting
@@ -279,11 +272,7 @@ class ControlBoard():
             self.logger.exception("Failed to parse position line")
 
     def reset_kill(self):
-        """Clear the internal kill state so operations can resume.
-
-        Sends a firmware reset (`M999`) followed by a settings reload (`M501`) if
-        the board is connected. Clears internal events so waiting loops can run
-        again.
+        """Clears the kill state so operations can resume. Currently Does not function due to Firmware messages not being recieved. This is due to the nature of Kill.
         """
         try:
             if not self.is_killed():
@@ -312,11 +301,11 @@ class ControlBoard():
             return False
 
     def resume_from_user_pause(self):
-        """Clear Marlin's wait-for-user state for unattended automation."""
+        """Clears the wait-for-user state."""
         if not self.is_connected():
             raise RuntimeError("Control board is not connected")
 
-        self.logger.warning("Sending M108 to clear firmware wait-for-user state")
+        self.logger.warning("Sending M108 for clearing firmware wait-for-user state")
         try:
             self._move_error.clear()
         except Exception:
@@ -339,10 +328,7 @@ class ControlBoard():
         self.reader_thread.start()
 
     def send_message(self, message: str, require_lock: bool = False, timeout: float = 0.5):
-        """Send a message to the control board.
-
-        ### Args:
-            message (str): The message to send.
+        """Sends a message to the control board.
         """
         if not self.is_connected():
             self.logger.error("Serial is not connected")
@@ -364,6 +350,7 @@ class ControlBoard():
             if require_lock:
                 # For required messages try to acquire the lock with a longer timeout
                 try:
+
                     acquired = self._write_lock.acquire(timeout=5.0)
                 except Exception:
                     acquired = False
@@ -371,6 +358,7 @@ class ControlBoard():
                     self.logger.error(f"Timed out waiting for serial write lock for required send: {original_cmd}")
                     raise RuntimeError("Failed to acquire serial write lock for required message")
             else:
+
                 try:
                     acquired = self._write_lock.acquire(timeout=timeout)
                 except Exception:
@@ -390,6 +378,7 @@ class ControlBoard():
                     self.logger.debug(f"Sending message: {message}")
             except Exception as e:
                 self.logger.exception(f"Failed to send message '{message}': {e}")
+
         finally:
             if acquired:
                 try:
@@ -427,6 +416,7 @@ class ControlBoard():
             
         
         if finish_move:
+
             self.finish_moves()
             sleep(0.1)
         # If we issued a relative move, revert to absolute positioning to
@@ -436,7 +426,9 @@ class ControlBoard():
             sleep(0.1)
 
     def finish_moves(self):
-        """Wait for the move to finish"""
+
+
+        """Waits for the move to finish"""
         if not self.is_connected():
             self.logger.error("Serial is not connected")
             raise RuntimeError("Control board is not connected")
@@ -462,8 +454,10 @@ class ControlBoard():
         self.logger.debug("Waiting for move to finish (interruptible)")
 
         timeout = 120.0
+
         completed = False
         deadline = time.monotonic() + timeout
+
         while time.monotonic() < deadline:
             if not self.is_connected():
                 raise RuntimeError("Control board disconnected while waiting for move completion")
@@ -507,7 +501,8 @@ class ControlBoard():
 
 
 class ControlBoardLineReader(serial.threaded.LineReader):
-    """Class to read lines from the control board on a separate thread."""
+    """This reads lines from the control board on a separate thread."""
+
     TERMINATOR = b"\n"
     POSITION_PREFIXS = ["X:", "Y:", "Z:", "A:", "B:"]
     
@@ -567,16 +562,10 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         if not line:
             return
 
-        # Ignore echoed M114 commands (some firmware echo commands back)
+        # Ignored echoed M114 commands (some firmware echo commands back)
         if line.upper().startswith("M114"):
             return
 
-        # If any position prefix is present, treat as a position update.
-        # Do this before handling the OK token so lines like 'ok X:... Y:...' get
-        # their positions recorded as well as signalling completion. After
-        # updating positions we return so these status lines are not repeatedly
-        # logged to the console. If the same line also contains 'ok' we mark
-        # completion before returning.
         if any(prefix in line for prefix in self.POSITION_PREFIXS):
             try:
                 self.control_board._update_positions_from_line(line)
@@ -594,14 +583,10 @@ class ControlBoardLineReader(serial.threaded.LineReader):
                 pass
             return
 
-        # Handle OK message used to mark move completion (case-insensitive).
-        # Accept lines that start with 'ok' (firmware may append extra text).
         if line.lower().startswith("ok"):
             self.control_board._record_command_ack()
             return
 
-        # In unattended automation this state never resolves on its own, so
-        # treat it as a move-level failure instead of waiting for timeout.
         if self._is_paused_for_user_line(line):
             self.logger.error(f"Firmware paused for user: {line}")
             self._record_move_error(line)
@@ -610,11 +595,6 @@ class ControlBoardLineReader(serial.threaded.LineReader):
         if line.strip().lower().startswith("echo:busy: processing"):
             self.logger.debug(f"Firmware: {line}")
             return
-
-        # Fallback: log other informational lines. Treat echoed firmware
-        # messages (including 'echo') as warnings. If they indicate a move
-        # error (e.g. homing failed) set the move error event so callers can
-        # abort waits.
         if self._is_move_error_line(line) or line.lower().startswith("echo"):
             self.logger.warning(f"Firmware: {line}")
             try:
@@ -626,7 +606,7 @@ class ControlBoardLineReader(serial.threaded.LineReader):
             self.logger.debug(f"Received: {line}")
             
     def connection_lost(self, exc):
-        """Handle the loss of connection."""
+        """Handles the loss of connection for the Serial."""
         if exc:
             self.logger.error(f"Serial connection lost: {exc}")
         else:

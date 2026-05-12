@@ -1,5 +1,6 @@
 from inspect import signature
 
+# Just creates default arguments for testing, and making default perameters.
 def move_toolhead(x: float, y: float, z: float, relative: int):
     pass
 

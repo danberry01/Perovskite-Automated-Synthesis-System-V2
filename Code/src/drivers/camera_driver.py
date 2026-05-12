@@ -23,28 +23,25 @@ class Camera(threading.Thread):
         
 
     def connect(self, device_index: int = 0, width: int = None, height: int = None):
-        """Open the underlying VideoCapture and start the reader loop.
 
-        Args:
-            device_index: camera device index (default 0)
-            width: optional preferred frame width in pixels
-            height: optional preferred frame height in pixels
-        """
         if self.is_connected():
+
             self.logger.error("Camera is already connected")
             return False
 
         try:
             self.video_capture = cv2.VideoCapture(device_index)
             if not self.video_capture.isOpened():
+
                 self.logger.error(f"Failed to open VideoCapture({device_index})")
                 self.video_capture = None
                 return False
 
-            # apply preferred resolution if provided or previously stored
             if width is not None and height is not None:
+
                 self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, int(width))
                 self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, int(height))
+
             elif self._preferred_width and self._preferred_height:
                 self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, int(self._preferred_width))
                 self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, int(self._preferred_height))
@@ -93,6 +90,7 @@ class Camera(threading.Thread):
                         break
                         
                 except cv2.error as e:
+
                     self.logger.error(f"Error while reading videocapture: {e}")
 
                 if self.release.is_set():
@@ -105,8 +103,7 @@ class Camera(threading.Thread):
             self.running.clear()
 
     def get_frame(self):
-        """Return the latest camera frame or None. Returns a copy to avoid
-        callers mutating the internal buffer."""
+        
         with self._frame_lock:
             if self.frame is None:
                 return None

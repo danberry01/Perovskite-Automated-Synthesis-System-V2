@@ -94,10 +94,18 @@ class CameraFrame(ctk.CTkFrame):
     
     def _on_camera_connection_changed(self, is_connected: bool):
         """Callback when camera connection state changes (updates button state only)"""
-        if is_connected:
-            self.openCameraButton.configure(text="Camera Connected", state="disabled")
-        else:
-            self.openCameraButton.configure(text="Connect Camera", state="normal")
+        def _apply_state():
+            if not self.winfo_exists():
+                return
+            if is_connected:
+                self.openCameraButton.configure(text="Camera Connected", state="disabled")
+            else:
+                self.openCameraButton.configure(text="Connect Camera", state="normal")
+
+        try:
+            self.after(0, _apply_state)
+        except Exception:
+            pass
     
     def update_video_feed(self):
         
